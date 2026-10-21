@@ -1,0 +1,8 @@
+cookies.txt
+logs/*
+!logs/.gitkeep
+*.pyc
+__pycache__/
+*.egg-info/
+.DS_Store
+.pytest_cache
