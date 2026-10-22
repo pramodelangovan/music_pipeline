@@ -67,6 +67,10 @@ export default function App() {
   const [error, setError] = useState("");
 
   const [gapSeconds, setGapSeconds] = useState(12);
+  const [paused, setPaused] = useState(false);
+  const [setupMessage, setSetupMessage] = useState("");
+  const [outputBase, setOutputBase] = useState("");
+  const [downloadRoot, setDownloadRoot] = useState(null);
   const [cookiesFile, setCookiesFile] = useState(null);
   const [cookiesStatus, setCookiesStatus] = useState(false);
 
@@ -79,6 +83,28 @@ export default function App() {
       throw new Error(payload.detail || "Failed to fetch jobs");
     }
     setJobs(payload.jobs || []);
+    setPaused(Boolean(payload.paused));
+    setSetupMessage(payload.setup_message || "");
+  };
+
+  const setQueueRunning = async (running) => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/queue/${running ? "start" : "pause"}`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to change queue state");
+      }
+      setPaused(Boolean(payload.paused));
+      setMessage(
+        running
+          ? `Queue started.${payload.recovered ? ` Reloaded ${payload.recovered} queued job(s).` : ""}`
+          : "Queue paused. The current download will finish."
+      );
+    } catch (err) {
+      setError(err.message || "Failed to change queue state");
+    }
   };
 
   const fetchSettings = async () => {
@@ -88,6 +114,8 @@ export default function App() {
       throw new Error(payload.detail || "Failed to fetch settings");
     }
     setGapSeconds(payload.gap_seconds ?? 12);
+    setOutputBase(payload.output_base || "");
+    setDownloadRoot(payload.download_root || null);
     setCookiesStatus(Boolean(payload.cookies_exists));
   };
 
@@ -177,13 +205,14 @@ export default function App() {
       const res = await fetch(`${API_BASE}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gap_seconds: Number(gapSeconds) }),
+        body: JSON.stringify({ gap_seconds: Number(gapSeconds), output_base: outputBase }),
       });
       const payload = await parseResponse(res);
       if (!res.ok) {
         throw new Error(payload.detail || "Failed to save settings");
       }
-      setMessage(`Saved queue gap: ${payload.gap_seconds}s`);
+      setOutputBase(payload.output_base || outputBase);
+      setMessage(`Saved: gap ${payload.gap_seconds}s, download folder ${payload.output_base}`);
     } catch (err) {
       setError(err.message || "Failed to save settings");
     }
@@ -243,7 +272,7 @@ export default function App() {
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               Queue Download Studio
             </Typography>
-            <Chip label={`${pendingJobs.length} active`} color="primary" variant="outlined" />
+            <Chip label={`${pendingJobs.length} active${paused ? " • paused" : ""}`} color={paused ? "warning" : "primary"} variant="outlined" />
           </Toolbar>
         </AppBar>
 
@@ -298,8 +327,20 @@ export default function App() {
                     <Button variant="contained" onClick={submitQueue} disabled={loading}>
                       Queue Downloads
                     </Button>
+                    <Button variant="contained" color="success" onClick={() => setQueueRunning(true)}>
+                      Start Queue
+                    </Button>
+                    <Button variant="outlined" color="warning" onClick={() => setQueueRunning(false)} disabled={paused}>
+                      Pause Queue
+                    </Button>
                   </Stack>
                 </Stack>
+
+                {setupMessage && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    {setupMessage}
+                  </Alert>
+                )}
 
                 {loading && <LinearProgress sx={{ mt: 2 }} />}
 
@@ -358,8 +399,19 @@ export default function App() {
                     onChange={(e) => setGapSeconds(e.target.value)}
                     sx={{ maxWidth: 320 }}
                   />
+                  <TextField
+                    label="Download Folder"
+                    value={outputBase}
+                    onChange={(e) => setOutputBase(e.target.value)}
+                    helperText={
+                      downloadRoot
+                        ? `Must be inside the mounted volume: ${downloadRoot} (relative names are allowed)`
+                        : "Absolute path, or relative to the project folder"
+                    }
+                    sx={{ maxWidth: 640 }}
+                  />
                   <Button variant="contained" onClick={saveSettings}>
-                    Save Gap Setting
+                    Save Settings
                   </Button>
 
                   <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "flex-start", md: "center" }}>

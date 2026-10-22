@@ -8,10 +8,14 @@ block_cipher = None
 
 a = Analysis(
     [str(root / "main.py")],
-    pathex=[str(root)],
+    pathex=[str(root), str(root.parent.parent)],
     binaries=[],
-    datas=[(str(root / "resources" / "style.qss"), "resources")],
-    hiddenimports=[],
+    datas=[
+        (str(root / "resources" / "style.qss"), "resources"),
+        (str(root.parent.parent / "scripts" / "setup.ps1"), "scripts"),
+        (str(root.parent.parent / "scripts" / "setup.sh"), "scripts"),
+    ],
+    hiddenimports=["core", "core.queue_manager", "yaml"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

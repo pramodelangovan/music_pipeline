@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     environment:
       - DENO_INSTALL=/opt/deno
+      - MP_DOWNLOAD_ROOT=/app/downloads
       - PATH=/opt/deno/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - ./downloads:/app/downloads

@@ -23,14 +23,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from api_client import ApiClient
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from core import DownloadManager, QueueItem  # noqa: E402
 
 
 class DesktopApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.client = ApiClient()
+        self.manager = DownloadManager()
+        self.manager.start()
         self.cookies_file_path = ""
+        self._active_count = 0
 
         self.setWindowTitle("Music Pipeline Desktop")
         self.resize(1200, 780)
@@ -58,7 +64,7 @@ class DesktopApp(QMainWindow):
         title_col = QVBoxLayout()
         header_title = QLabel("Queue Download Studio")
         header_title.setObjectName("HeaderTitle")
-        header_meta = QLabel("PySide6 Desktop Client • API-backed Queue + History")
+        header_meta = QLabel("PySide6 Desktop Client • Local Queue + History")
         header_meta.setObjectName("HeaderMeta")
         title_col.addWidget(header_title)
         title_col.addWidget(header_meta)
@@ -92,10 +98,15 @@ class DesktopApp(QMainWindow):
         action_row = QHBoxLayout()
         self.add_row_btn = QPushButton("Add Row")
         self.queue_btn = QPushButton("Queue Downloads")
+        self.start_queue_btn = QPushButton("Start Queue")
+        self.pause_queue_btn = QPushButton("Pause Queue")
+        self.pause_queue_btn.setObjectName("SecondaryButton")
         self.clear_btn = QPushButton("Clear Last Downloads")
         self.clear_btn.setObjectName("WarningButton")
         action_row.addWidget(self.add_row_btn)
         action_row.addWidget(self.queue_btn)
+        action_row.addWidget(self.start_queue_btn)
+        action_row.addWidget(self.pause_queue_btn)
         action_row.addStretch(1)
         action_row.addWidget(self.clear_btn)
         layout.addLayout(action_row)
@@ -128,14 +139,14 @@ class DesktopApp(QMainWindow):
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
 
-        api_row = QHBoxLayout()
-        api_row.addWidget(QLabel("API Base URL"))
-        self.api_base_edit = QLineEdit("http://127.0.0.1:8000")
-        api_row.addWidget(self.api_base_edit, 1)
-        self.apply_api_btn = QPushButton("Apply API URL")
-        self.apply_api_btn.setObjectName("SecondaryButton")
-        api_row.addWidget(self.apply_api_btn)
-        layout.addLayout(api_row)
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(QLabel("Download Folder"))
+        self.output_edit = QLineEdit()
+        folder_row.addWidget(self.output_edit, 1)
+        self.browse_folder_btn = QPushButton("Browse...")
+        self.browse_folder_btn.setObjectName("SecondaryButton")
+        folder_row.addWidget(self.browse_folder_btn)
+        layout.addLayout(folder_row)
 
         gap_row = QHBoxLayout()
         gap_row.addWidget(QLabel("Gap Between Downloads (sec)"))
@@ -143,7 +154,7 @@ class DesktopApp(QMainWindow):
         self.gap_spin.setRange(0, 3600)
         self.gap_spin.setValue(12)
         gap_row.addWidget(self.gap_spin)
-        self.save_settings_btn = QPushButton("Save Gap")
+        self.save_settings_btn = QPushButton("Save Settings")
         gap_row.addWidget(self.save_settings_btn)
         gap_row.addStretch(1)
         layout.addLayout(gap_row)
@@ -191,11 +202,13 @@ class DesktopApp(QMainWindow):
     def _wire_events(self) -> None:
         self.add_row_btn.clicked.connect(self.add_input_row)
         self.queue_btn.clicked.connect(self.queue_downloads)
+        self.start_queue_btn.clicked.connect(self.start_queue)
+        self.pause_queue_btn.clicked.connect(self.pause_queue)
         self.clear_btn.clicked.connect(self.clear_recent)
         self.pick_cookies_btn.clicked.connect(self.pick_cookies_file)
         self.upload_cookies_btn.clicked.connect(self.upload_cookies)
         self.save_settings_btn.clicked.connect(self.save_settings)
-        self.apply_api_btn.clicked.connect(self.apply_api_base)
+        self.browse_folder_btn.clicked.connect(self.pick_download_folder)
         self.refresh_history_btn.clicked.connect(self.refresh_history)
 
     def _start_polling(self) -> None:
@@ -233,11 +246,11 @@ class DesktopApp(QMainWindow):
             if not url:
                 continue
             items.append(
-                {
-                    "url": url,
-                    "media_type": type_w.currentText(),
-                    "folder_name": folder_w.text().strip() or "youtube_playlist",
-                }
+                QueueItem(
+                    url=url,
+                    media_type=type_w.currentText(),
+                    folder_name=folder_w.text().strip() or "youtube_playlist",
+                )
             )
 
         if not items:
@@ -245,16 +258,37 @@ class DesktopApp(QMainWindow):
             return
 
         try:
-            payload = self.client.queue_items(items)
+            payload = self.manager.submit(items)
             self.statusBar().showMessage(f"Queued {payload.get('accepted', 0)} rows", 5000)
             self.refresh_jobs()
         except Exception as exc:
             self._error(str(exc))
 
+    def start_queue(self) -> None:
+        recovered = self.manager.resume()
+        self._update_queue_state()
+        self.refresh_jobs(silent=True)
+        extra = f" ({recovered} queued job(s) reloaded)" if recovered else ""
+        self.statusBar().showMessage(f"Queue started{extra}", 4000)
+
+    def pause_queue(self) -> None:
+        self.manager.pause()
+        self._update_queue_state()
+        self.statusBar().showMessage("Queue paused (current download will finish)", 4000)
+
+    def _update_queue_state(self) -> None:
+        paused = self.manager.paused
+        self.start_queue_btn.setEnabled(True)
+        self.pause_queue_btn.setEnabled(not paused)
+        setup_message = self.manager.setup_message
+        if setup_message:
+            self.statusBar().showMessage(setup_message)
+        label = f"Active: {self._active_count}"
+        self.active_jobs_label.setText(f"{label} • PAUSED" if paused else label)
+
     def clear_recent(self) -> None:
         try:
-            payload = self.client.clear_recent()
-            cleared = payload.get("cleared", 0)
+            cleared = self.manager.clear_recent()
             self.statusBar().showMessage(f"Cleared {cleared} completed/failed rows", 5000)
             self.refresh_jobs()
             self.refresh_history(silent=True)
@@ -263,7 +297,7 @@ class DesktopApp(QMainWindow):
 
     def refresh_jobs(self, silent: bool = False) -> None:
         try:
-            payload = self.client.get_jobs()
+            payload = self.manager.jobs_snapshot()
             rows = payload.get("jobs", [])
             self.queue_status_table.setRowCount(0)
 
@@ -281,15 +315,15 @@ class DesktopApp(QMainWindow):
                 self._set_item(self.queue_status_table, row, 3, item.get("resolved_url", ""))
                 self._set_item(self.queue_status_table, row, 4, item.get("error", ""))
 
-            self.active_jobs_label.setText(f"Active: {active_count}")
+            self._active_count = active_count
+            self._update_queue_state()
         except Exception as exc:
             if not silent:
                 self._error(str(exc))
 
     def refresh_history(self, silent: bool = False) -> None:
         try:
-            payload = self.client.get_history(limit=1000)
-            rows = payload.get("history", [])
+            rows = self.manager.list_history(limit=1000)
             self.history_table.setRowCount(0)
             for item in rows:
                 row = self.history_table.rowCount()
@@ -307,8 +341,9 @@ class DesktopApp(QMainWindow):
 
     def load_settings(self) -> None:
         try:
-            payload = self.client.get_settings()
+            payload = self.manager.get_settings()
             self.gap_spin.setValue(int(payload.get("gap_seconds", 12)))
+            self.output_edit.setText(payload.get("output_base", ""))
             has_cookies = payload.get("cookies_exists", False)
             self.cookies_status_label.setText(f"Cookies status: {'ready' if has_cookies else 'missing'}")
         except Exception as exc:
@@ -316,20 +351,20 @@ class DesktopApp(QMainWindow):
 
     def save_settings(self) -> None:
         try:
-            payload = self.client.update_settings(self.gap_spin.value())
+            payload = self.manager.update_settings(self.gap_spin.value(), self.output_edit.text())
+            self.output_edit.setText(payload.get("output_base", ""))
             self.statusBar().showMessage(
-                f"Saved gap: {payload.get('gap_seconds', self.gap_spin.value())} sec",
+                f"Saved: gap {payload.get('gap_seconds', self.gap_spin.value())} sec, "
+                f"folder {payload.get('output_base', '')}",
                 5000,
             )
         except Exception as exc:
             self._error(str(exc))
 
-    def apply_api_base(self) -> None:
-        self.client.set_base_url(self.api_base_edit.text().strip())
-        self.statusBar().showMessage(f"API URL set to {self.client.base_url}", 4000)
-        self.load_settings()
-        self.refresh_jobs()
-        self.refresh_history()
+    def pick_download_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select download folder", self.output_edit.text())
+        if folder:
+            self.output_edit.setText(folder)
 
     def pick_cookies_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(self, "Select cookies.txt", "", "Text files (*.txt);;All files (*)")
@@ -343,7 +378,7 @@ class DesktopApp(QMainWindow):
             self._error("Please choose cookies.txt first.")
             return
         try:
-            payload = self.client.upload_cookies(self.cookies_file_path)
+            payload = self.manager.import_cookies_file(self.cookies_file_path)
             has_cookies = payload.get("cookies_exists", False)
             self.cookies_status_label.setText(f"Cookies status: {'ready' if has_cookies else 'missing'}")
             self.statusBar().showMessage("Cookies uploaded", 4000)
@@ -370,6 +405,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     load_stylesheet(app)
     window = DesktopApp()
+    app.aboutToQuit.connect(window.manager.stop)
     window.show()
     return app.exec()
 

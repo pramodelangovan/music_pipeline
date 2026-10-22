@@ -276,16 +276,16 @@ Open the frontend and queue one or more rows with URL + media type + target fold
 
 ## Desktop App (PySide6)
 
-A desktop client is included and uses the same backend architecture/API:
+A desktop client is included. It runs the download queue in-process (no API server needed) using the same shared service, `core/queue_manager.py`, that the HTTP API wraps:
 
 - Queue tab: add multiple URL rows (audio/video + folder), queue downloads, clear last downloads
-- Settings tab: API base URL, queue gap, cookies upload
+- Settings tab: queue gap, cookies import
 - History tab: full SQLite-backed download history
 
 ### Desktop files
 
 - App entry: `apps/desktop/main.py`
-- API client: `apps/desktop/api_client.py`
+- Shared queue/download service: `core/queue_manager.py` (used by both desktop and `apps/api/main.py`)
 - Styling (QSS): `apps/desktop/resources/style.qss`
 - PyInstaller spec: `apps/desktop/music_pipeline_desktop.spec`
 
