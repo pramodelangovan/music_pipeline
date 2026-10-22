@@ -7,8 +7,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Checkbox,
   Container,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   LinearProgress,
@@ -67,6 +69,15 @@ export default function App() {
   const [error, setError] = useState("");
 
   const [gapSeconds, setGapSeconds] = useState(12);
+  const [researchForm, setResearchForm] = useState({
+    name: "",
+    aliases: "",
+    known_albums: "",
+    fetch_singles: true,
+    fetch_unknown_albums: true,
+  });
+  const [research, setResearch] = useState({ status: "idle", log: [], items: [], folder_name: "" });
+  const [selectedIds, setSelectedIds] = useState([]);
   const [paused, setPaused] = useState(false);
   const [setupMessage, setSetupMessage] = useState("");
   const [outputBase, setOutputBase] = useState("");
@@ -75,6 +86,89 @@ export default function App() {
   const [cookiesStatus, setCookiesStatus] = useState(false);
 
   const pendingJobs = useMemo(() => jobs.filter((j) => j.status === "queued" || j.status === "downloading"), [jobs]);
+
+  const fetchResearch = async () => {
+    const res = await fetch(`${API_BASE}/research`);
+    const payload = await parseResponse(res);
+    if (!res.ok) {
+      throw new Error(payload.detail || "Failed to fetch research status");
+    }
+    setResearch(payload);
+    return payload;
+  };
+
+  const splitCsv = (text) =>
+    text
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+  const startResearch = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: researchForm.name.trim(),
+          aliases: splitCsv(researchForm.aliases),
+          known_albums: splitCsv(researchForm.known_albums),
+          fetch_singles: researchForm.fetch_singles,
+          fetch_unknown_albums: researchForm.fetch_unknown_albums,
+        }),
+      });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(
+          Array.isArray(payload.detail) ? "Enter a valid artist name." : payload.detail || "Failed to start research"
+        );
+      }
+      setSelectedIds([]);
+      setResearch(payload);
+    } catch (err) {
+      setError(err.message || "Failed to start research");
+    }
+  };
+
+  const cancelResearch = async () => {
+    try {
+      await fetch(`${API_BASE}/research/cancel`, { method: "POST" });
+    } catch (err) {
+      setError(err.message || "Failed to cancel research");
+    }
+  };
+
+  const toggleSelected = (id) =>
+    setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+
+  const queueSelectedResearch = async () => {
+    setMessage("");
+    setError("");
+    const folder = research.folder_name || "research";
+    const items = research.items
+      .filter((item) => selectedIds.includes(item.id))
+      .map((item) => ({ url: item.url, media_type: "audio", folder_name: folder }));
+    if (items.length === 0) {
+      setError("Select at least one result to queue.");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/queue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to queue research results");
+      }
+      setMessage(`Queued ${payload.accepted} research result(s) into '${folder}'.`);
+      await fetchJobs();
+    } catch (err) {
+      setError(err.message || "Failed to queue research results");
+    }
+  };
 
   const fetchJobs = async () => {
     const res = await fetch(`${API_BASE}/jobs`);
@@ -134,6 +228,7 @@ export default function App() {
         await fetchSettings();
         await fetchJobs();
         await fetchHistory();
+        await fetchResearch();
       } catch (err) {
         setError(err.message || "Failed to connect to API");
       }
@@ -143,15 +238,27 @@ export default function App() {
     const timer = setInterval(async () => {
       try {
         await fetchJobs();
-        if (tab === 2) {
+        if (tab === 3) {
           await fetchHistory();
         }
       } catch {
         // Keep polling without crashing the UI.
       }
     }, 5000);
-    return () => clearInterval(timer);
-  }, [tab]);
+    const researchTimer = setInterval(async () => {
+      try {
+        if (tab === 1 || research.status === "running") {
+          await fetchResearch();
+        }
+      } catch {
+        // Keep polling without crashing the UI.
+      }
+    }, 1500);
+    return () => {
+      clearInterval(timer);
+      clearInterval(researchTimer);
+    };
+  }, [tab, research.status]);
 
   const addRow = () => setRows((current) => [...current, makeRow()]);
   const removeRow = (id) => {
@@ -280,9 +387,117 @@ export default function App() {
           <CardContent>
             <Tabs value={tab} onChange={(_, value) => setTab(value)}>
               <Tab label="Queue" />
+              <Tab label="Research" />
               <Tab label="Settings" />
               <Tab label="History" />
             </Tabs>
+
+            {tab === 1 && (
+              <Box sx={{ mt: 3 }}>
+                <Stack spacing={2}>
+                  <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                    <TextField
+                      label="Artist name"
+                      value={researchForm.name}
+                      onChange={(e) => setResearchForm({ ...researchForm, name: e.target.value })}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Aliases (comma separated)"
+                      value={researchForm.aliases}
+                      onChange={(e) => setResearchForm({ ...researchForm, aliases: e.target.value })}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Known albums (comma separated)"
+                      value={researchForm.known_albums}
+                      onChange={(e) => setResearchForm({ ...researchForm, known_albums: e.target.value })}
+                      fullWidth
+                    />
+                  </Stack>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={researchForm.fetch_singles}
+                          onChange={(e) => setResearchForm({ ...researchForm, fetch_singles: e.target.checked })}
+                        />
+                      }
+                      label="Find singles"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={researchForm.fetch_unknown_albums}
+                          onChange={(e) => setResearchForm({ ...researchForm, fetch_unknown_albums: e.target.checked })}
+                        />
+                      }
+                      label="Find other albums"
+                    />
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Chip label={research.status} variant="outlined" color={research.status === "failed" ? "error" : "primary"} />
+                    <Button variant="contained" onClick={startResearch} disabled={research.status === "running"}>
+                      Start Research
+                    </Button>
+                    <Button variant="outlined" onClick={cancelResearch} disabled={research.status !== "running"}>
+                      Cancel
+                    </Button>
+                  </Stack>
+
+                  {research.status === "running" && <LinearProgress />}
+
+                  <Box
+                    component="pre"
+                    sx={{ m: 0, p: 1.5, maxHeight: 180, overflow: "auto", bgcolor: "#f4f6fb", borderRadius: 1, fontSize: 12 }}
+                  >
+                    {research.log.length ? research.log.join("\n") : "Research log will appear here."}
+                  </Box>
+
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={research.items.length > 0 && selectedIds.length === research.items.length}
+                            indeterminate={selectedIds.length > 0 && selectedIds.length < research.items.length}
+                            onChange={(e) => setSelectedIds(e.target.checked ? research.items.map((i) => i.id) : [])}
+                          />
+                        </TableCell>
+                        <TableCell>Type</TableCell>
+                        <TableCell>Title</TableCell>
+                        <TableCell>Duration</TableCell>
+                        <TableCell>URL</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {research.items.map((item) => (
+                        <TableRow key={item.id} hover>
+                          <TableCell padding="checkbox">
+                            <Checkbox checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} />
+                          </TableCell>
+                          <TableCell>{item.type}</TableCell>
+                          <TableCell>{item.title}</TableCell>
+                          <TableCell>
+                            {Math.floor((item.duration || 0) / 60)}:{String((item.duration || 0) % 60).padStart(2, "0")}
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <a href={item.url} target="_blank" rel="noreferrer">
+                              {item.url}
+                            </a>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Button variant="contained" onClick={queueSelectedResearch} disabled={selectedIds.length === 0}>
+                      Queue Selected (Audio)
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
 
             {tab === 0 && (
               <Box sx={{ mt: 3 }}>
@@ -388,7 +603,7 @@ export default function App() {
               </Box>
             )}
 
-            {tab === 1 && (
+            {tab === 2 && (
               <Box sx={{ mt: 3 }}>
                 <Stack spacing={3}>
                   <TextField
@@ -440,7 +655,7 @@ export default function App() {
               </Box>
             )}
 
-            {tab === 2 && (
+            {tab === 3 && (
               <Box sx={{ mt: 3 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                   <Typography variant="h6">Download History</Typography>

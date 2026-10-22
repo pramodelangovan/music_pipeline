@@ -50,6 +50,15 @@ def _subprocess_env() -> dict:
     return env
 
 
+def _ytdlp_cmd() -> List[str]:
+    """Command prefix for yt-dlp: the binary on PATH, else this interpreter's yt_dlp module."""
+    if shutil.which("yt-dlp", path=_subprocess_env()["PATH"]):
+        return ["yt-dlp"]
+    if not getattr(sys, "frozen", False):
+        return [sys.executable, "-m", "yt_dlp"]
+    return ["yt-dlp"]
+
+
 def _scripts_dir() -> Path:
     bundled = Path(getattr(sys, "_MEIPASS", ROOT_DIR)) / "scripts"
     return bundled if bundled.exists() else ROOT_DIR / "scripts"
@@ -515,7 +524,7 @@ class DownloadManager:
             raise RuntimeError(f"cookies file not found at {self.cookies_path}")
 
         cmd = [
-            "yt-dlp",
+            *_ytdlp_cmd(),
             "--flat-playlist",
             "--skip-download",
             "--no-warnings",
@@ -547,7 +556,7 @@ class DownloadManager:
 
         if job.media_type == "audio":
             cmd = [
-                "yt-dlp",
+                *_ytdlp_cmd(),
                 "-x",
                 "--audio-format",
                 "mp3",
@@ -563,7 +572,7 @@ class DownloadManager:
             ]
         else:
             cmd = [
-                "yt-dlp",
+                *_ytdlp_cmd(),
                 "-f",
                 "bv*+ba/b",
                 "--merge-output-format",

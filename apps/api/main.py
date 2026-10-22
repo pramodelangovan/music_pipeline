@@ -9,13 +9,21 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from core import DownloadManager, QueueItem
+from core import DownloadManager, QueueItem, ResearchManager
 
 
 class QueueItemInput(BaseModel):
     url: str = Field(min_length=5)
     media_type: Literal["audio", "video"] = "audio"
     folder_name: str = Field(min_length=1, max_length=100)
+
+
+class ResearchRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    aliases: List[str] = Field(default_factory=list, max_length=10)
+    known_albums: List[str] = Field(default_factory=list, max_length=30)
+    fetch_singles: bool = True
+    fetch_unknown_albums: bool = True
 
 
 class QueueRequest(BaseModel):
@@ -28,6 +36,7 @@ class UpdateSettingsRequest(BaseModel):
 
 
 manager = DownloadManager()
+research = ResearchManager(lambda: manager.cookies_path)
 app = FastAPI(title="Music Pipeline Queue API", version="1.0.0")
 
 app.add_middleware(
@@ -89,6 +98,28 @@ def pause_queue() -> dict:
 def start_queue() -> dict:
     recovered = manager.resume()
     return {"paused": manager.paused, "recovered": recovered}
+
+
+@app.get("/api/research")
+def research_status() -> dict:
+    return research.snapshot()
+
+
+@app.post("/api/research")
+def research_start(payload: ResearchRequest) -> dict:
+    try:
+        research.start(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return research.snapshot()
+
+
+@app.post("/api/research/cancel")
+def research_cancel() -> dict:
+    research.cancel()
+    return {"cancelling": True}
 
 
 @app.get("/api/settings")
