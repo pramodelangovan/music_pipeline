@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 .pytest_cache
 .venv/
+apps/web/dist/
+apps/web/node_modules/

@@ -35,6 +35,10 @@ playlist:
   output_base: "/media/disks/nas/music/Playlists"
   max_bitrate: 0            # 0 = best available MP3 quality
 
+queue_download:
+  gap_seconds: 12           # seconds between each queued download
+  output_base: "downloads" # base folder for queued audio/video output
+
 cleanup:
   delete_empty_folders: true
   fix_filenames: true

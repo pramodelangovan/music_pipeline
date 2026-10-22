@@ -205,3 +205,114 @@ python3 scripts/playlist_download.py "https://music.youtube.com/playlist?list=..
 ---
 
 This project is intentionally generic and can be used for YouTube music playlists across many genres, not just one specific catalog or region.
+
+---
+
+## Queue Downloader + React UI
+
+This repository now includes a queue-based downloader service and a React Material UI.
+
+### Features
+
+- supports single URL download as `audio` or `video`
+- supports playlist URL expansion into per-track queue jobs
+- uses two worker agents:
+  - Queue Agent: resolves incoming URLs and expands playlists into individual jobs
+  - Download Agent: downloads queued jobs one-by-one with a configurable time gap
+- supports multi-row queue input from UI
+- supports cookies upload from a Settings tab (updates `cookies.txt`)
+- tracks all queue jobs in SQLite (`logs/downloads.db`)
+- includes a History page in UI for completed and past jobs
+- includes a `Clear Last Downloads` action that clears completed items from the Queue view while keeping history
+
+### Tracking database
+
+- Database file: `logs/downloads.db`
+- Main table: `downloads`
+- Status values: `queued`, `downloading`, `done`, `failed`
+- Queue page reads active/non-cleared rows
+- History page reads full history, including previously cleared rows
+
+### Run with Docker Compose
+
+```bash
+cd /home/Workspace/music_pipeline
+docker compose up --build
+```
+
+Services:
+
+- UI: `http://localhost:3000`
+- API: `http://localhost:8000`
+
+Volumes:
+
+- `./downloads:/app/downloads` (downloaded media)
+- `./logs:/app/logs` (runtime logs and settings)
+- `./cookies.txt:/app/cookies.txt` (cookie updates from UI)
+- `./config.yaml:/app/config.yaml` (base config)
+
+### Run without Docker
+
+Backend:
+
+```bash
+cd /home/Workspace/music_pipeline
+pip3 install -r requirements.txt
+uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+```
+
+Frontend:
+
+```bash
+cd /home/Workspace/music_pipeline/apps/web
+npm install
+npm run dev
+```
+
+Open the frontend and queue one or more rows with URL + media type + target folder.
+
+---
+
+## Desktop App (PySide6)
+
+A desktop client is included and uses the same backend architecture/API:
+
+- Queue tab: add multiple URL rows (audio/video + folder), queue downloads, clear last downloads
+- Settings tab: API base URL, queue gap, cookies upload
+- History tab: full SQLite-backed download history
+
+### Desktop files
+
+- App entry: `apps/desktop/main.py`
+- API client: `apps/desktop/api_client.py`
+- Styling (QSS): `apps/desktop/resources/style.qss`
+- PyInstaller spec: `apps/desktop/music_pipeline_desktop.spec`
+
+### Run desktop app (dev)
+
+```bash
+cd /home/Workspace/music_pipeline
+pip3 install -r requirements-desktop.txt
+python3 apps/desktop/main.py
+```
+
+### Build Windows EXE with PyInstaller
+
+Build on Windows (recommended):
+
+```bat
+cd C:\path\to\music_pipeline
+scripts\build_desktop.bat
+```
+
+Output:
+
+- `dist\MusicPipelineDesktop\MusicPipelineDesktop.exe`
+
+Linux/macOS build helper (non-EXE targets):
+
+```bash
+cd /home/Workspace/music_pipeline
+bash scripts/build_desktop.sh
+```

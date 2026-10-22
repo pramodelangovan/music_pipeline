@@ -1,0 +1,104 @@
+QWidget {
+    background: #f5f8ff;
+    color: #1f2a37;
+    font-family: "Segoe UI";
+    font-size: 13px;
+}
+
+QMainWindow {
+    background: #edf3ff;
+}
+
+QFrame#Header {
+    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+      stop: 0 #0f4ec8, stop: 1 #2f7ae5);
+    border-radius: 14px;
+}
+
+QLabel#HeaderTitle {
+    color: white;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+QLabel#HeaderMeta {
+    color: #dbe8ff;
+    font-size: 12px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #d6e1f5;
+    border-radius: 10px;
+    background: white;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: #dce8fb;
+    border: 1px solid #b8cdf0;
+    padding: 8px 14px;
+    margin-right: 4px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+QTabBar::tab:selected {
+    background: white;
+    border-bottom: 1px solid white;
+}
+
+QPushButton {
+    background: #1a66dc;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background: #0f58c9;
+}
+
+QPushButton:disabled {
+    background: #9eb8e8;
+}
+
+QPushButton#SecondaryButton {
+    background: #e7eefb;
+    color: #214b8f;
+    border: 1px solid #bfd2f3;
+}
+
+QPushButton#WarningButton {
+    background: #f5b742;
+    color: #263238;
+}
+
+QLineEdit, QComboBox, QSpinBox {
+    border: 1px solid #c7d5ee;
+    border-radius: 8px;
+    padding: 6px;
+    background: white;
+}
+
+QTableWidget {
+    border: 1px solid #d6e1f5;
+    border-radius: 8px;
+    background: #ffffff;
+    gridline-color: #e8eefb;
+    alternate-background-color: #f7faff;
+}
+
+QHeaderView::section {
+    background: #e7efff;
+    border: none;
+    border-bottom: 1px solid #c8d8f6;
+    padding: 8px;
+    font-weight: 600;
+}
+
+QStatusBar {
+    background: white;
+    border-top: 1px solid #d6e1f5;
+}

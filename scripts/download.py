@@ -192,6 +192,7 @@ def download_with_retry(cmd, url, max_retries=None):
             wait = 2 ** attempt * 10
             log.warning(f"  ↺ Error ({error_type}, attempt {attempt+1}/{max_retries}), retrying in {wait}s...")
             time.sleep(wait)
+            
 
     return False, errors
 
