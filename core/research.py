@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from core.queue_manager import (
-    ROOT_DIR,
+    LOGS_DIR,
     _SUBPROCESS_FLAGS,
     _js_runtime_args,
     _subprocess_env,
@@ -190,7 +190,7 @@ def research_artist(
     )
 
     if save_log:
-        logs_dir = ROOT_DIR / "logs"
+        logs_dir = LOGS_DIR
         logs_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = logs_dir / f"research_{re.sub(r'[^\w]', '_', name)}_{stamp}.json"

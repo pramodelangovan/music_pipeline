@@ -2,7 +2,8 @@ import sys
 from pathlib import Path
 from typing import TypeVar
 
-from PySide6.QtCore import QFile, QIODevice, QTimer, Qt
+from PySide6.QtCore import QFile, QIODevice, QTimer, QUrl, Qt
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
@@ -29,6 +30,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from core import DownloadManager, QueueItem, ResearchManager  # noqa: E402
+from core.queue_manager import LOGS_DIR  # noqa: E402
 
 WidgetT = TypeVar("WidgetT", bound=QWidget)
 
@@ -89,6 +91,9 @@ class DesktopApp(QMainWindow):
         self.pick_cookies_btn = self._widget(QPushButton, "pick_cookies_btn")
         self.cookies_file_label = self._widget(QLabel, "cookies_file_label")
         self.upload_cookies_btn = self._widget(QPushButton, "upload_cookies_btn")
+        self.open_logs_btn = self._widget(QPushButton, "open_logs_btn")
+        self.logs_path_label = self._widget(QLabel, "logs_path_label")
+        self.logs_path_label.setText(str(LOGS_DIR))
         self.cookies_status_label = self._widget(QLabel, "cookies_status_label")
         self.research_name_edit = self._widget(QLineEdit, "research_name_edit")
         self.research_aliases_edit = self._widget(QLineEdit, "research_aliases_edit")
@@ -156,6 +161,7 @@ class DesktopApp(QMainWindow):
         self.clear_btn.clicked.connect(self.clear_recent)
         self.pick_cookies_btn.clicked.connect(self.pick_cookies_file)
         self.upload_cookies_btn.clicked.connect(self.upload_cookies)
+        self.open_logs_btn.clicked.connect(self.open_logs_folder)
         self.save_settings_btn.clicked.connect(self.save_settings)
         self.browse_folder_btn.clicked.connect(self.pick_download_folder)
         self.refresh_history_btn.clicked.connect(self.refresh_history)
@@ -395,6 +401,10 @@ class DesktopApp(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select download folder", self.output_edit.text())
         if folder:
             self.output_edit.setText(folder)
+
+    def open_logs_folder(self) -> None:
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(LOGS_DIR)))
 
     def pick_cookies_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(self, "Select cookies.txt", "", "Text files (*.txt);;All files (*)")

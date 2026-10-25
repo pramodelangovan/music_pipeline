@@ -25,11 +25,27 @@ if getattr(sys, "frozen", False):
 else:
     ROOT_DIR = Path(__file__).resolve().parents[1]
 
-COOKIES_PATH = ROOT_DIR / "cookies.txt"
+
+def _user_data_dir() -> Path:
+    """Per-user folder for the packaged desktop app's logs, history and cookies."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "MusicPipeline"
+
+
+# Packaged app: data lives in the user folder. Source/Docker: next to the project.
+DATA_DIR = _user_data_dir() if getattr(sys, "frozen", False) else ROOT_DIR
+LOGS_DIR = DATA_DIR / "logs"
+
+COOKIES_PATH = DATA_DIR / "cookies.txt"
 DEFAULT_GAP_SECONDS = 12
-DEFAULT_OUTPUT_BASE = ROOT_DIR / "downloads"
-RUNTIME_SETTINGS_PATH = ROOT_DIR / "logs" / "runtime_settings.json"
-DB_PATH = ROOT_DIR / "logs" / "downloads.db"
+DEFAULT_OUTPUT_BASE = (Path.cwd() if getattr(sys, "frozen", False) else ROOT_DIR) / "downloads"
+RUNTIME_SETTINGS_PATH = LOGS_DIR / "runtime_settings.json"
+DB_PATH = LOGS_DIR / "downloads.db"
 
 # Avoid flashing console windows when running yt-dlp from a windowed app.
 _SUBPROCESS_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
@@ -148,7 +164,7 @@ class DownloadManager:
         self.restricted = bool(root_env)
         self.download_root = Path(root_env).expanduser().resolve() if root_env else None
         self.settings_path = (
-            ROOT_DIR / "logs" / "runtime_settings.docker.json" if self.restricted else RUNTIME_SETTINGS_PATH
+            LOGS_DIR / "runtime_settings.docker.json" if self.restricted else RUNTIME_SETTINGS_PATH
         )
         self.cookies_path = str(COOKIES_PATH)
         if self.restricted:
@@ -172,7 +188,7 @@ class DownloadManager:
         self.setup_message = ""
 
         Path(self.output_base).mkdir(parents=True, exist_ok=True)
-        (ROOT_DIR / "logs").mkdir(parents=True, exist_ok=True)
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self._init_db()

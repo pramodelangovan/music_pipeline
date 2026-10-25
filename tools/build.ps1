@@ -6,7 +6,7 @@
 # Targets:
 #   web        build the Docker images and start the web app (API + UI) with Docker Compose
 #   web-build  build the Docker images and package them as dist\docker.tar.gz (plus a compose file)
-#   desktop    build the desktop app with PyInstaller into dist\MusicPipeline\
+#   desktop    build the desktop app with PyInstaller into a single file, dist\MusicPipeline.exe
 param(
     [Parameter(Position = 0)]
     [ValidateSet("web", "web-build", "desktop")]
@@ -92,7 +92,7 @@ function Build-Desktop {
     Invoke-Checked $venvPython -m PyInstaller --clean --noconfirm apps\desktop\music_pipeline_desktop.spec
     Write-Host ""
     Write-Host "Desktop build finished."
-    Write-Host "Output: dist\MusicPipeline\MusicPipeline.exe"
+    Write-Host "Output: dist\MusicPipeline.exe"
 }
 
 switch ($Target) {

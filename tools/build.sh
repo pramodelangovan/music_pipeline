@@ -4,7 +4,7 @@
 # Usage: bash tools/build.sh <target>
 #   web        build the Docker images and start the web app (API + UI) with Docker Compose
 #   web-build  build the Docker images and package them as dist/docker.tar.gz (plus a compose file)
-#   desktop    build the desktop app with PyInstaller into dist/MusicPipeline/
+#   desktop    build the desktop app with PyInstaller into a single file, dist/MusicPipeline
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -64,7 +64,7 @@ build_desktop() {
   .venv/bin/python -m PyInstaller --clean --noconfirm apps/desktop/music_pipeline_desktop.spec
   echo
   echo "Desktop build finished."
-  echo "Output: dist/MusicPipeline/"
+  echo "Output: dist/MusicPipeline"
 }
 
 case "${1:-}" in

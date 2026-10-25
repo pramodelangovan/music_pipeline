@@ -34,8 +34,9 @@ It ships as two tools that share the same engine (`core/`):
 2. Run the build:
    - Windows: `powershell -ExecutionPolicy Bypass -File tools\build.ps1 desktop`
    - Linux/macOS: `bash tools/build.sh desktop`
-3. The app is created in `dist\MusicPipeline\` (Windows: `MusicPipeline.exe`).
-4. Copy the whole `dist\MusicPipeline\` folder wherever you want; keep `cookies.txt` next to the executable (or import it in Settings).
+3. The app is created as a single file: `dist\MusicPipeline.exe` (Linux/macOS: `dist/MusicPipeline`).
+4. Copy that one file anywhere and run it. Downloads go to a `downloads` folder in the directory you launch it from.
+5. Logs, history and `cookies.txt` are stored in your user folder (`%LOCALAPPDATA%\MusicPipeline` on Windows, `~/.local/share/MusicPipeline` on Linux, `~/Library/Application Support/MusicPipeline` on macOS). Use **Settings → Open Logs Folder** to view them.
 
 ### Run from source (no build)
 
