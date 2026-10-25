@@ -16,7 +16,7 @@ a = Analysis(
         (str(root.parent.parent / "tools" / "setup.ps1"), "tools"),
         (str(root.parent.parent / "tools" / "setup.sh"), "tools"),
     ],
-    hiddenimports=["core", "core.queue_manager", "core.research"],
+    hiddenimports=["core", "core.queue_manager", "core.research", "yt_dlp"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

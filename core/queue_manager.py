@@ -66,13 +66,19 @@ def _subprocess_env() -> dict:
     return env
 
 
+YTDLP_FLAG = "--run-yt-dlp"
+
+
 def _ytdlp_cmd() -> List[str]:
-    """Command prefix for yt-dlp: the binary on PATH, else this interpreter's yt_dlp module."""
+    """Command prefix for yt-dlp.
+
+    The packaged app bundles yt_dlp and re-invokes itself with YTDLP_FLAG (see apps/desktop/main.py).
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, YTDLP_FLAG]
     if shutil.which("yt-dlp", path=_subprocess_env()["PATH"]):
         return ["yt-dlp"]
-    if not getattr(sys, "frozen", False):
-        return [sys.executable, "-m", "yt_dlp"]
-    return ["yt-dlp"]
+    return [sys.executable, "-m", "yt_dlp"]
 
 
 def _tools_dir() -> Path:
