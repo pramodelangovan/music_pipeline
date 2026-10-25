@@ -1,242 +1,120 @@
-# 🎵 YouTube Music Downloader
+# 🎵 Music Pipeline
 
-A generic, open-ended pipeline for downloading YouTube music playlists as MP3 files, organizing them into folders, and tagging the output with album, artist, track, and artwork metadata.
+Music Pipeline downloads YouTube music (single videos or whole playlists) as MP3/video through a download queue, tags audio with metadata and cover art, and keeps a history of every job.
 
----
+It ships as two tools that share the same engine (`core/`):
 
-## Overview
-
-This project supports a simple workflow:
-
-1. Accept a YouTube playlist URL
-2. Download each track as MP3
-3. Preserve highest available audio quality
-4. Embed cover art and ID3 metadata
-5. Save the library into a clean folder structure
+| Tool | What it is | Run it with |
+|------|------------|-------------|
+| **Desktop app** | PySide6 window, runs the queue in-process | `tools\build.ps1 desktop` (or run from source) |
+| **Web app** | FastAPI backend + React UI in Docker | `tools\build.ps1 web` / `web-build` |
 
 ---
 
-## What the project does
+## 1. One-time setup (both tools)
 
-- downloads YouTube playlist items as MP3
-- writes title, artist, album, and track number tags
-- embeds cover art into the MP3 files
-- organizes output under artist/album folders
-- supports override metadata for specific playlists
-- creates log files for playlist runs and metadata writes
+1. Get the code and open a terminal in the project root.
+2. Run the setup script. It installs Python, ffmpeg and Deno, creates `.venv` if it does not exist, and installs every Python requirement:
+   - Windows: `powershell -ExecutionPolicy Bypass -File tools\setup.ps1`
+   - Linux/macOS: `bash tools/setup.sh`
+3. Export your YouTube cookies (YouTube often asks for a login):
+   1. Install the Chrome extension **Get cookies.txt LOCALLY**.
+   2. Open YouTube while signed in and export the cookies.
+   3. Save the file as `cookies.txt` in the project root (or upload it later in the Settings tab).
 
----
-
-## Prerequisites
-
-```bash
-# system packages
-sudo apt update
-sudo apt install ffmpeg python3 python3-pip
-
-# python packages
-pip3 install -r requirements.txt
-
-# optional but recommended for YouTube challenge solving
-auto-install deno
-curl -fsSL https://deno.land/install.sh | sh
-```
-
-Make sure your shell has Deno on PATH:
-
-```bash
-export PATH="$HOME/.deno/bin:$PATH"
-```
+> Only the web app deployed with Docker can skip step 2: the Docker images already contain everything. You only need Docker.
 
 ---
 
-## Quick start
+## 2. Desktop app
 
-### 1) Export YouTube cookies
-YouTube often requires login cookies for access.
+### Build
 
-For Chrome:
+1. Complete the setup above.
+2. Run the build:
+   - Windows: `powershell -ExecutionPolicy Bypass -File tools\build.ps1 desktop`
+   - Linux/macOS: `bash tools/build.sh desktop`
+3. The app is created in `dist\MusicPipeline\` (Windows: `MusicPipeline.exe`).
+4. Copy the whole `dist\MusicPipeline\` folder wherever you want; keep `cookies.txt` next to the executable (or import it in Settings).
 
-1. Install the Chrome extension: Get cookies.txt LOCALLY
-2. Open YouTube while signed in
-3. Click the extension and export the cookie file
-4. Save it as `cookies.txt` in the project root
+### Run from source (no build)
 
-Example:
+1. Activate the environment: `.venv\Scripts\Activate.ps1` (Linux/macOS: `source .venv/bin/activate`).
+2. Start the app: `python apps/desktop/main.py`.
 
-```bash
-cp ~/Downloads/cookies.txt /home/Workspace/music_pipeline/cookies.txt
-```
+### Use
 
-### 2) Run the web UI or desktop app
+1. Open **Settings**: set the gap between downloads and import `cookies.txt`.
+2. Open **Queue**: add one or more rows (URL, audio/video, target folder) and click **Queue Downloads**.
+3. Click **Start Queue** to begin, **Pause Queue** to pause. Playlists are expanded into one job per track.
+4. **Clear Last Downloads** removes finished items from the Queue view (history is kept).
+5. Open **Research** to search for music, tick the results and click **Queue Selected (Audio)**.
+6. Open **History** to see every past job; **Clear History** deletes finished/failed entries (queued and active jobs stay).
 
-See [Queue Downloader + React UI](#queue-downloader--react-ui) and [Desktop App (PySide6)](#desktop-app-pyside6) below.
+If ffmpeg or Deno is missing at runtime, the app installs them automatically.
 
 ---
 
-## File structure
+## 3. Web app (Docker)
+
+Requirements: Docker with Compose v2, and the Docker daemon running.
+
+### Option A: build and deploy on this machine
+
+1. Run:
+   - Windows: `powershell -ExecutionPolicy Bypass -File tools\build.ps1 web`
+   - Linux/macOS: `bash tools/build.sh web`
+2. Open the UI at `http://localhost:3000` (API at `http://localhost:8000`).
+3. Stop with `docker compose down`.
+
+### Option B: build a package and deploy elsewhere
+
+1. Run:
+   - Windows: `powershell -ExecutionPolicy Bypass -File tools\build.ps1 web-build`
+   - Linux/macOS: `bash tools/build.sh web-build`
+2. `dist/` now holds `docker.tar.gz` (both images), `docker-compose.yml` and an empty `cookies.txt`.
+3. Copy that folder to the target machine (which only needs Docker).
+4. On the target, in that folder:
+   1. `docker load -i docker.tar.gz`
+   2. `mkdir downloads logs`
+   3. `docker compose up -d`
+5. Open `http://<target-host>:3000`.
+
+### Use
+
+1. Open **Settings**: upload `cookies.txt` and set the queue gap.
+2. Open **Queue**: add rows (URL, audio/video, target folder) and queue them; playlists expand into per-track jobs.
+3. **Clear Last Downloads** hides finished items from the Queue; **History** keeps everything.
+4. In **History**, **Clear History** deletes finished/failed entries.
+5. Files appear in `./downloads`; logs and the job database (`logs/downloads.db`) are in `./logs`.
+
+### Run the web app without Docker
+
+1. Backend (inside `.venv`): `uvicorn apps.api.main:app --host 0.0.0.0 --port 8000`
+2. Frontend: `cd apps/web`, `npm install`, `npm run dev`
+
+---
+
+## Project layout
 
 ```text
 music_pipeline/
-├── README.md
-├── requirements.txt
-├── config.yaml
-├── cookies.txt
-├── core/            # shared queue/research services (used by API and desktop)
+├── core/            # shared queue/research engine (used by API and desktop)
 ├── apps/
 │   ├── api/         # FastAPI service
 │   ├── web/         # React UI
-│   └── desktop/     # PySide6 desktop app (ui.py + resources/desktop.ui)
-├── tools/           # dependency setup (setup.sh/.ps1) and desktop build scripts
-└── logs/
+│   └── desktop/     # PySide6 app (ui.py + resources/desktop.ui, style.qss)
+├── tools/           # setup.sh/.ps1 and build.sh/.ps1
+├── docker-compose.yml
+├── requirements.txt          # API + core packages
+├── requirements-desktop.txt  # everything incl. PySide6 and PyInstaller
+└── dist/            # build output (git-ignored)
 ```
-
----
-
-## Important notes
-
-### Cookies
-YouTube can block access without valid cookies. If you see bot-check errors, refresh your cookies and retry.
-
-### JS challenge handling
-Some YouTube videos require a JavaScript challenge solver. The project includes Deno-based support for this path.
-
-### Metadata quality
-For movie and regional music, playlist-level metadata overrides are usually more accurate than generic open metadata APIs. Use the override file when you already know the correct artist and album.
-
----
 
 ## Troubleshooting
 
-### `Sign in to confirm you're not a bot`
-Refresh the cookies file and retry.
-
-### `Requested format is not available`
-Install the required JS runtime support and ensure Deno is on PATH.
-
-### `Metadata not appearing`
-Check the MP3 tag writing logs in the `logs/` folder and verify `mutagen` is installed.
-
-### `ffmpeg not found`
-Install it with:
-
-```bash
-sudo apt install ffmpeg
-```
-
----
-
-This project is intentionally generic and can be used for YouTube music playlists across many genres, not just one specific catalog or region.
-
----
-
-## Queue Downloader + React UI
-
-This repository now includes a queue-based downloader service and a React Material UI.
-
-### Features
-
-- supports single URL download as `audio` or `video`
-- supports playlist URL expansion into per-track queue jobs
-- uses two worker agents:
-  - Queue Agent: resolves incoming URLs and expands playlists into individual jobs
-  - Download Agent: downloads queued jobs one-by-one with a configurable time gap
-- supports multi-row queue input from UI
-- supports cookies upload from a Settings tab (updates `cookies.txt`)
-- tracks all queue jobs in SQLite (`logs/downloads.db`)
-- includes a History page in UI for completed and past jobs
-- includes a `Clear Last Downloads` action that clears completed items from the Queue view while keeping history
-
-### Tracking database
-
-- Database file: `logs/downloads.db`
-- Main table: `downloads`
-- Status values: `queued`, `downloading`, `done`, `failed`
-- Queue page reads active/non-cleared rows
-- History page reads full history, including previously cleared rows
-
-### Run with Docker Compose
-
-```bash
-cd /home/Workspace/music_pipeline
-docker compose up --build
-```
-
-Services:
-
-- UI: `http://localhost:3000`
-- API: `http://localhost:8000`
-
-Volumes:
-
-- `./downloads:/app/downloads` (downloaded media)
-- `./logs:/app/logs` (runtime logs and settings)
-- `./cookies.txt:/app/cookies.txt` (cookie updates from UI)
-- `./config.yaml:/app/config.yaml` (base config)
-
-### Run without Docker
-
-Backend:
-
-```bash
-cd /home/Workspace/music_pipeline
-pip3 install -r requirements.txt
-uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
-```
-
-Frontend:
-
-```bash
-cd /home/Workspace/music_pipeline/apps/web
-npm install
-npm run dev
-```
-
-Open the frontend and queue one or more rows with URL + media type + target folder.
-
----
-
-## Desktop App (PySide6)
-
-A desktop client is included. It runs the download queue in-process (no API server needed) using the same shared service, `core/queue_manager.py`, that the HTTP API wraps:
-
-- Queue tab: add multiple URL rows (audio/video + folder), queue downloads, clear last downloads
-- Settings tab: queue gap, cookies import
-- History tab: full SQLite-backed download history
-
-### Desktop files
-
-- App entry: `apps/desktop/main.py`
-- Window logic: `apps/desktop/ui.py`; layout (Qt Designer XML): `apps/desktop/resources/desktop.ui`
-- Dependency setup (ffmpeg/Deno), run automatically by `core` when missing: `tools/setup.sh`, `tools/setup.ps1`
-- Shared queue/download service: `core/queue_manager.py` (used by both desktop and `apps/api/main.py`)
-- Styling (QSS): `apps/desktop/resources/style.qss`
-- PyInstaller spec: `apps/desktop/music_pipeline_desktop.spec`
-
-### Run desktop app (dev)
-
-```bash
-cd /home/Workspace/music_pipeline
-pip3 install -r requirements-desktop.txt
-python3 apps/desktop/main.py
-```
-
-### Build Windows EXE with PyInstaller
-
-Build on Windows (recommended):
-
-```bat
-cd C:\path\to\music_pipeline
-tools\build_desktop.bat
-```
-
-Output:
-
-- `dist\MusicPipelineDesktop\MusicPipelineDesktop.exe`
-
-Linux/macOS build helper (non-EXE targets):
-
-```bash
-cd /home/Workspace/music_pipeline
-bash tools/build_desktop.sh
-```
+- **`Sign in to confirm you're not a bot`**: refresh `cookies.txt` and retry.
+- **`Requested format is not available`**: make sure Deno is installed and on PATH (rerun the setup script).
+- **`ffmpeg not found`**: rerun the setup script, then restart the terminal.
+- **Metadata missing**: check `logs/` and that `mutagen` is installed.
+- **`The Docker daemon is not running`**: start Docker Desktop and rerun the build.

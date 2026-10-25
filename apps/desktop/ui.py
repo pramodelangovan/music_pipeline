@@ -48,7 +48,7 @@ class DesktopApp(QMainWindow):
         self.cookies_file_path = ""
         self._active_count = 0
 
-        self.setWindowTitle("Music Pipeline Desktop")
+        self.setWindowTitle("Music Pipeline")
         self.resize(1200, 780)
 
         self._load_ui()

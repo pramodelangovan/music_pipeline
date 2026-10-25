@@ -397,7 +397,7 @@ export default function App() {
         <AppBar position="static" elevation={0} sx={{ borderRadius: 3, bgcolor: "white", color: "#122847" }}>
           <Toolbar>
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              Queue Download Studio
+              Music Pipeline
             </Typography>
             <Chip label={`${pendingJobs.length} active${paused ? " • paused" : ""}`} color={paused ? "warning" : "primary"} variant="outlined" />
           </Toolbar>

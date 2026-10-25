@@ -1,0 +1,12 @@
+.git
+.venv
+dist
+build
+downloads
+logs
+cookies.txt
+**/__pycache__
+apps/web/node_modules
+apps/web/dist
+apps/desktop
+tools/build.*

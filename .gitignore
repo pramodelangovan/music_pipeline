@@ -8,4 +8,6 @@ __pycache__/
 .pytest_cache
 .venv/
 apps/web/dist/
+/dist/
+/build/
 apps/web/node_modules/

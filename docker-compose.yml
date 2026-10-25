@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   api:
+    image: music-pipeline-api:latest
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -15,7 +16,6 @@ services:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
       - ./cookies.txt:/app/cookies.txt
-      - ./config.yaml:/app/config.yaml
       - deno_cache:/opt/deno
     ports:
       - "0.0.0.0:8000:8000"
@@ -27,6 +27,7 @@ services:
       start_period: 20s
 
   web:
+    image: music-pipeline-web:latest
     build:
       context: .
       dockerfile: apps/web/Dockerfile

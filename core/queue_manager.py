@@ -19,14 +19,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
-import yaml
 
 if getattr(sys, "frozen", False):
     ROOT_DIR = Path(sys.executable).resolve().parent
 else:
     ROOT_DIR = Path(__file__).resolve().parents[1]
 
-CONFIG_PATH = ROOT_DIR / "config.yaml"
+COOKIES_PATH = ROOT_DIR / "cookies.txt"
+DEFAULT_GAP_SECONDS = 12
 DEFAULT_OUTPUT_BASE = ROOT_DIR / "downloads"
 RUNTIME_SETTINGS_PATH = ROOT_DIR / "logs" / "runtime_settings.json"
 DB_PATH = ROOT_DIR / "logs" / "downloads.db"
@@ -96,7 +96,7 @@ def _missing_dependencies() -> List[str]:
 
 
 def ensure_dependencies() -> tuple[bool, str]:
-    """Run the platform setup script if ffmpeg or a JS runtime is missing."""
+    """Run the platform setup script (deps only) if ffmpeg or a JS runtime is missing."""
     missing = _missing_dependencies()
     if not missing:
         return True, ""
@@ -104,9 +104,9 @@ def ensure_dependencies() -> tuple[bool, str]:
     tools = _tools_dir()
     if sys.platform == "win32":
         shell = shutil.which("powershell") or shutil.which("pwsh")
-        cmd = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(tools / "setup.ps1")] if shell else None
+        cmd = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(tools / "setup.ps1"), "-DepsOnly"] if shell else None
     else:
-        cmd = ["bash", str(tools / "setup.sh")]
+        cmd = ["bash", str(tools / "setup.sh"), "--deps-only"]
     script_file = tools / ("setup.ps1" if sys.platform == "win32" else "setup.sh")
     if not cmd or not script_file.exists():
         return False, f"Missing {', '.join(missing)} and no setup script was found in {tools}"
@@ -150,15 +150,12 @@ class DownloadManager:
         self.settings_path = (
             ROOT_DIR / "logs" / "runtime_settings.docker.json" if self.restricted else RUNTIME_SETTINGS_PATH
         )
-        cfg = self._load_config()
-        queue_cfg = cfg.get("queue_download", {})
-        self.cookies_path = str((ROOT_DIR / cfg.get("paths", {}).get("cookies", "cookies.txt")).resolve())
-        configured_output = queue_cfg.get("output_base") or DEFAULT_OUTPUT_BASE
+        self.cookies_path = str(COOKIES_PATH)
         if self.restricted:
             self.output_base = str(self.download_root)
         else:
-            self.output_base = self._resolve_path(configured_output)
-        self.gap_seconds = int(queue_cfg.get("gap_seconds", 12))
+            self.output_base = str(DEFAULT_OUTPUT_BASE)
+        self.gap_seconds = DEFAULT_GAP_SECONDS
         self._load_runtime_settings()
 
         self.download_queue: queue.Queue[DownloadJob] = queue.Queue()
@@ -206,12 +203,6 @@ class DownloadManager:
                 """
             )
             self.db.commit()
-
-    def _load_config(self) -> dict:
-        if not CONFIG_PATH.exists():
-            return {}
-        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
 
     def _load_runtime_settings(self) -> None:
         if not self.settings_path.exists():

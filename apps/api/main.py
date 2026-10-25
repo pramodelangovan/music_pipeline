@@ -37,7 +37,7 @@ class UpdateSettingsRequest(BaseModel):
 
 manager = DownloadManager()
 research = ResearchManager(lambda: manager.cookies_path)
-app = FastAPI(title="Music Pipeline Queue API", version="1.0.0")
+app = FastAPI(title="Music Pipeline API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

@@ -17,7 +17,7 @@
       <property name="bottomMargin"><number>12</number></property>
       <item>
        <layout class="QVBoxLayout" name="titleLayout">
-        <item><widget class="QLabel" name="HeaderTitle"><property name="text"><string>Music Download Assistant</string></property></widget></item>
+        <item><widget class="QLabel" name="HeaderTitle"><property name="text"><string>Music Pipeline</string></property></widget></item>
        </layout>
       </item>
       <item>

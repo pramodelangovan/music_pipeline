@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-root = Path(__file__).resolve().parent
+root = Path(SPECPATH).resolve()  # SPECPATH is provided by PyInstaller
 
 block_cipher = None
 
@@ -16,7 +16,7 @@ a = Analysis(
         (str(root.parent.parent / "tools" / "setup.ps1"), "tools"),
         (str(root.parent.parent / "tools" / "setup.sh"), "tools"),
     ],
-    hiddenimports=["core", "core.queue_manager", "core.research", "yaml"],
+    hiddenimports=["core", "core.queue_manager", "core.research"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -33,7 +33,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="MusicPipelineDesktop",
+    name="MusicPipeline",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -49,5 +49,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="MusicPipelineDesktop",
+    name="MusicPipeline",
 )
