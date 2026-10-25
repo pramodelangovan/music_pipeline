@@ -59,9 +59,9 @@ def _ytdlp_cmd() -> List[str]:
     return ["yt-dlp"]
 
 
-def _scripts_dir() -> Path:
-    bundled = Path(getattr(sys, "_MEIPASS", ROOT_DIR)) / "scripts"
-    return bundled if bundled.exists() else ROOT_DIR / "scripts"
+def _tools_dir() -> Path:
+    bundled = Path(getattr(sys, "_MEIPASS", ROOT_DIR)) / "tools"
+    return bundled if bundled.exists() else ROOT_DIR / "tools"
 
 
 def _refresh_path() -> None:
@@ -101,15 +101,15 @@ def ensure_dependencies() -> tuple[bool, str]:
     if not missing:
         return True, ""
 
-    scripts = _scripts_dir()
+    tools = _tools_dir()
     if sys.platform == "win32":
         shell = shutil.which("powershell") or shutil.which("pwsh")
-        cmd = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(scripts / "setup.ps1")] if shell else None
+        cmd = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(tools / "setup.ps1")] if shell else None
     else:
-        cmd = ["bash", str(scripts / "setup.sh")]
-    script_file = scripts / ("setup.ps1" if sys.platform == "win32" else "setup.sh")
+        cmd = ["bash", str(tools / "setup.sh")]
+    script_file = tools / ("setup.ps1" if sys.platform == "win32" else "setup.sh")
     if not cmd or not script_file.exists():
-        return False, f"Missing {', '.join(missing)} and no setup script was found in {scripts}"
+        return False, f"Missing {', '.join(missing)} and no setup script was found in {tools}"
 
     result = subprocess.run(cmd, capture_output=True, text=True, creationflags=_SUBPROCESS_FLAGS)
     _refresh_path()
@@ -376,6 +376,21 @@ class DownloadManager:
             )
             self.db.commit()
             return int(cur.rowcount)
+
+    def clear_history(self) -> int:
+        with self.lock:
+            finished_ids = [
+                job_id
+                for job_id, job in self.jobs.items()
+                if job.status in ("done", "failed")
+            ]
+            for job_id in finished_ids:
+                del self.jobs[job_id]
+
+            with self.db_lock:
+                cur = self.db.execute("DELETE FROM downloads WHERE status IN ('done', 'failed')")
+                self.db.commit()
+                return int(cur.rowcount)
 
     def _persist_job(self, job: DownloadJob) -> None:
         with self.db_lock:

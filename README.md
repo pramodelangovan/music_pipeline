@@ -14,8 +14,6 @@ This project supports a simple workflow:
 4. Embed cover art and ID3 metadata
 5. Save the library into a clean folder structure
 
-It also keeps the older artist-driven research/download flow intact for projects that still use that pattern.
-
 ---
 
 ## What the project does
@@ -70,52 +68,9 @@ Example:
 cp ~/Downloads/cookies.txt /home/Workspace/music_pipeline/cookies.txt
 ```
 
-### 2) Run a playlist download
+### 2) Run the web UI or desktop app
 
-```bash
-cd /home/Workspace/music_pipeline
-./pipeline.sh "https://music.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
-```
-
-### 3) Or use the direct downloader command
-
-```bash
-python3 scripts/playlist_download.py "https://music.youtube.com/playlist?list=YOUR_PLAYLIST_ID" \
-  --artist "Artist Name" \
-  --album "Album Name" \
-  --output-dir "/media/disks/nas/music/Playlists"
-```
-
-### 4) Reapply metadata to an existing folder
-
-```bash
-python3 scripts/playlist_metadata.py "/media/disks/nas/music/Playlists/Artist Name/Album Name" \
-  --artist "Artist Name" \
-  --album "Album Name" \
-  --cover "/path/to/cover.jpg"
-```
-
----
-
-## Playlist override metadata
-
-For film or playlist-specific music where YouTube data is noisy or incomplete, the project supports explicit overrides via [playlist_metadata.yaml](playlist_metadata.yaml).
-
-Example:
-
-```yaml
-playlists:
-  - id: "OLAK5uy_lHWX8XhioMBQjHfDE0DurDjhXV3WdY454"
-    name: "Jailer 2 Soundtrack"
-    artist: "Anirudh Ravichander"
-    album: "Jailer 2"
-    tracks:
-      - title: "Ala Bolelo"
-        artist: "Anirudh Ravichander"
-        album: "Jailer 2"
-```
-
-This lets the script prefer the correct album and artist values instead of guessing from generic metadata sources.
+See [Queue Downloader + React UI](#queue-downloader--react-ui) and [Desktop App (PySide6)](#desktop-app-pyside6) below.
 
 ---
 
@@ -127,25 +82,13 @@ music_pipeline/
 ├── requirements.txt
 ├── config.yaml
 ├── cookies.txt
-├── playlist_metadata.yaml
-├── pipeline.sh
-├── scripts/
-│   ├── download.py
-│   ├── research.py
-│   ├── cleanup.py
-│   ├── split_chapters.py
-│   ├── playlist_download.py
-│   ├── playlist_metadata.py
-│   ├── playlist_override_metadata.py
-│   ├── playlist_utils.py
-│   └── metadata_enricher.py
-├── logs/
-│   ├── playlist_download_*.log
-│   ├── playlist_summary_*.json
-│   └── ...
-└── tests/
-    ├── test_playlist_metadata.py
-    └── test_metadata_enricher.py
+├── core/            # shared queue/research services (used by API and desktop)
+├── apps/
+│   ├── api/         # FastAPI service
+│   ├── web/         # React UI
+│   └── desktop/     # PySide6 desktop app (ui.py + resources/desktop.ui)
+├── tools/           # dependency setup (setup.sh/.ps1) and desktop build scripts
+└── logs/
 ```
 
 ---
@@ -179,27 +122,6 @@ Install it with:
 
 ```bash
 sudo apt install ffmpeg
-```
-
----
-
-## Typical usage patterns
-
-### Generic playlist download
-```bash
-./pipeline.sh "https://music.youtube.com/playlist?list=..."
-```
-
-### Playlist with explicit artist/album
-```bash
-python3 scripts/playlist_download.py "https://music.youtube.com/playlist?list=..." \
-  --artist "Artist Name" \
-  --album "Album Name"
-```
-
-### Old-style artist-based workflow
-```bash
-./pipeline.sh "Artist Name"
 ```
 
 ---
@@ -285,6 +207,8 @@ A desktop client is included. It runs the download queue in-process (no API serv
 ### Desktop files
 
 - App entry: `apps/desktop/main.py`
+- Window logic: `apps/desktop/ui.py`; layout (Qt Designer XML): `apps/desktop/resources/desktop.ui`
+- Dependency setup (ffmpeg/Deno), run automatically by `core` when missing: `tools/setup.sh`, `tools/setup.ps1`
 - Shared queue/download service: `core/queue_manager.py` (used by both desktop and `apps/api/main.py`)
 - Styling (QSS): `apps/desktop/resources/style.qss`
 - PyInstaller spec: `apps/desktop/music_pipeline_desktop.spec`
@@ -303,7 +227,7 @@ Build on Windows (recommended):
 
 ```bat
 cd C:\path\to\music_pipeline
-scripts\build_desktop.bat
+tools\build_desktop.bat
 ```
 
 Output:
@@ -314,5 +238,5 @@ Linux/macOS build helper (non-EXE targets):
 
 ```bash
 cd /home/Workspace/music_pipeline
-bash scripts/build_desktop.sh
+bash tools/build_desktop.sh
 ```

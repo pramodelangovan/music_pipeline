@@ -1,6 +1,6 @@
 """Shared artist research service (YouTube search -> candidate items).
 
-Used by scripts/research.py, the HTTP API and the desktop app. No web/UI dependencies.
+Used by the HTTP API and the desktop app. No web/UI dependencies.
 """
 
 from __future__ import annotations

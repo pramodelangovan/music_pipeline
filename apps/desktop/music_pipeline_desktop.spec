@@ -12,8 +12,9 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(root / "resources" / "style.qss"), "resources"),
-        (str(root.parent.parent / "scripts" / "setup.ps1"), "scripts"),
-        (str(root.parent.parent / "scripts" / "setup.sh"), "scripts"),
+        (str(root / "resources" / "desktop.ui"), "resources"),
+        (str(root.parent.parent / "tools" / "setup.ps1"), "tools"),
+        (str(root.parent.parent / "tools" / "setup.sh"), "tools"),
     ],
     hiddenimports=["core", "core.queue_manager", "core.research", "yaml"],
     hookspath=[],

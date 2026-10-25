@@ -79,6 +79,11 @@ def clear_jobs() -> dict:
     return {"cleared": manager.clear_recent()}
 
 
+@app.post("/api/history/clear")
+def clear_history() -> dict:
+    return {"cleared": manager.clear_history()}
+
+
 @app.post("/api/queue")
 def enqueue(payload: QueueRequest) -> dict:
     if not payload.items:

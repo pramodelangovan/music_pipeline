@@ -1,5 +1,5 @@
 # Installs Deno and ffmpeg on Windows. Run from PowerShell:
-#   powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+#   powershell -ExecutionPolicy Bypass -File tools\setup.ps1
 $ErrorActionPreference = "Stop"
 
 function Test-Cmd($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }

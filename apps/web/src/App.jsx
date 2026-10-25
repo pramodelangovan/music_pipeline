@@ -371,6 +371,26 @@ export default function App() {
     }
   };
 
+  const clearHistory = async () => {
+    setMessage("");
+    setError("");
+    if (!window.confirm("Delete all completed and failed history? Active downloads will be kept.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/history/clear`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to clear history");
+      }
+      await fetchJobs();
+      await fetchHistory();
+      setMessage(`Deleted ${payload.cleared || 0} completed/failed history rows.`);
+    } catch (err) {
+      setError(err.message || "Failed to clear history");
+    }
+  };
+
   return (
     <Box sx={{ minHeight: "100vh", background: "radial-gradient(circle at top, #e0ecff 0%, #f4f6fb 45%, #f9fafc 100%)", py: 4 }}>
       <Container maxWidth="lg">
@@ -659,18 +679,23 @@ export default function App() {
               <Box sx={{ mt: 3 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                   <Typography variant="h6">Download History</Typography>
-                  <Button
-                    variant="outlined"
-                    onClick={async () => {
-                      try {
-                        await fetchHistory();
-                      } catch (err) {
-                        setError(err.message || "Failed to refresh history");
-                      }
-                    }}
-                  >
-                    Refresh
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      onClick={async () => {
+                        try {
+                          await fetchHistory();
+                        } catch (err) {
+                          setError(err.message || "Failed to refresh history");
+                        }
+                      }}
+                    >
+                      Refresh
+                    </Button>
+                    <Button variant="outlined" color="error" onClick={clearHistory}>
+                      Clear History
+                    </Button>
+                  </Stack>
                 </Stack>
 
                 <Table size="small">

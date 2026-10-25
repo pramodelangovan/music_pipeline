@@ -25,7 +25,7 @@ QLabel#HeaderTitle {
     font-weight: 700;
 }
 
-QLabel#HeaderMeta {
+QLabel#HeaderMeta, QLabel#active_jobs_label {
     color: #dbe8ff;
     font-size: 12px;
 }
@@ -68,13 +68,19 @@ QPushButton:disabled {
     background: #9eb8e8;
 }
 
-QPushButton#SecondaryButton {
+QPushButton#pause_queue_btn,
+QPushButton#research_cancel_btn,
+QPushButton#research_select_all_btn,
+QPushButton#browse_folder_btn,
+QPushButton#pick_cookies_btn,
+QPushButton#refresh_history_btn {
     background: #e7eefb;
     color: #214b8f;
     border: 1px solid #bfd2f3;
 }
 
-QPushButton#WarningButton {
+QPushButton#clear_btn,
+QPushButton#clear_history_btn {
     background: #f5b742;
     color: #263238;
 }
