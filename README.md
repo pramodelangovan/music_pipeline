@@ -1,4 +1,4 @@
-<p align="center"><img src="resources/music-pipeline.svg" alt="Music Pipeline logo" width="160"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/pramodelangovan/music_pipeline/refs/heads/main/resources/music-pipeline.svg" alt="Music Pipeline logo" width="160"></p>
 
 # Music Pipeline
 
