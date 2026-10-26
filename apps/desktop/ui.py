@@ -2,23 +2,27 @@ import sys
 from pathlib import Path
 from typing import TypeVar
 
-from PySide6.QtCore import QFile, QIODevice, QTimer, QUrl, Qt
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QFile, QIODevice, QSize, QTimer, QUrl, Qt
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QFrame,
     QPlainTextEdit,
     QFileDialog,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
     QStatusBar,
+    QStyle,
+    QSystemTrayIcon,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -39,6 +43,12 @@ def _resource_dir() -> Path:
     return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "resources"
 
 
+def _logo_path() -> Path:
+    """Shared logo: bundled into 'resources' in the exe, in <repo>/resources when run from source."""
+    frozen_dir = Path(getattr(sys, "_MEIPASS", ""))
+    return (frozen_dir / "resources" if hasattr(sys, "_MEIPASS") else ROOT_DIR / "resources") / "music-pipeline.svg"
+
+
 class DesktopApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -49,8 +59,11 @@ class DesktopApp(QMainWindow):
         self.research_timer.timeout.connect(self._refresh_research)
         self.cookies_file_path = ""
         self._active_count = 0
+        self._quitting = False
 
         self.setWindowTitle("Music Pipeline")
+        self.logo_icon = QIcon(str(_logo_path()))
+        self.setWindowIcon(self.logo_icon)
         self.resize(1200, 780)
 
         self._load_ui()
@@ -60,6 +73,116 @@ class DesktopApp(QMainWindow):
         self.load_settings()
         self.refresh_jobs()
         self.refresh_history()
+        self._refresh_research()
+        self._setup_tray()
+
+    def _setup_tray(self) -> None:
+        icon = self.windowIcon()
+        if icon.isNull():
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+        self.tray = QSystemTrayIcon(icon, self)
+        self.tray.setToolTip("Music Pipeline")
+        menu = QMenu(self)
+        menu.addAction("Show", self._show_from_tray)
+        menu.addSeparator()
+        menu.addAction("Quit", self.quit_app)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._on_tray_activated)
+        self.tray.show()
+        self._notified_idle = True
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._show_from_tray()
+
+    def _show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def has_active_work(self) -> bool:
+        return self.manager.has_active_work() or self.research.is_active()
+
+    def offer_resume(self) -> None:
+        """On launch, offer to continue downloads/research interrupted by a previous close or crash."""
+        pending_downloads = self.manager.has_active_work()
+        pending_research = self.research.resumable
+        if not (pending_downloads or pending_research):
+            return
+        parts = []
+        if pending_downloads:
+            parts.append("downloads")
+        if pending_research:
+            parts.append(f"research for '{self.research.artist}'")
+        answer = QMessageBox.question(
+            self,
+            "Resume unfinished work",
+            f"Unfinished {' and '.join(parts)} from the last session were found.\n\nContinue now?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if pending_downloads:
+            self.start_queue()
+        if pending_research and self.research.resume_interrupted():
+            self.research_timer.start(1500)
+            self._refresh_research()
+
+    def _confirm_close(self) -> str:
+        """Returns 'tray', 'quit' or 'cancel'."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Downloads or research in progress")
+        box.setText(
+            "Downloads or research are still running.\n\n"
+            "Run in the system tray to keep them going in the background?\n"
+            "If you quit, progress is saved and you can continue next time you open the app."
+        )
+        tray_btn = box.addButton("Run in Tray", QMessageBox.ButtonRole.AcceptRole)
+        quit_btn = box.addButton("Quit Anyway", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(tray_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is tray_btn:
+            return "tray"
+        if clicked is quit_btn:
+            return "quit"
+        return "cancel"
+
+    def closeEvent(self, event) -> None:
+        if self._quitting or not self.has_active_work():
+            event.accept()
+            QApplication.quit()
+            return
+        choice = self._confirm_close()
+        if choice == "tray":
+            event.ignore()
+            self.hide()
+            self._notified_idle = False
+            self.tray.showMessage(
+                "Music Pipeline", "Still running in the tray. Click the icon to reopen.",
+                QSystemTrayIcon.MessageIcon.Information, 4000,
+            )
+        elif choice == "quit":
+            self._quitting = True
+            event.accept()
+            QApplication.quit()
+        else:
+            event.ignore()
+
+    def quit_app(self) -> None:
+        if self.has_active_work():
+            choice = QMessageBox.question(
+                self,
+                "Quit Music Pipeline",
+                "Downloads or research are still running. Quit anyway?\n"
+                "Progress is saved and can be continued next time.",
+            )
+            if choice != QMessageBox.StandardButton.Yes:
+                return
+        self._quitting = True
+        self.tray.hide()
+        QApplication.quit()
 
     def _load_ui(self) -> None:
         ui_file = QFile(str(_resource_dir() / "desktop.ui"))
@@ -82,6 +205,8 @@ class DesktopApp(QMainWindow):
         self.start_queue_btn = self._widget(QPushButton, "start_queue_btn")
         self.pause_queue_btn = self._widget(QPushButton, "pause_queue_btn")
         self.clear_btn = self._widget(QPushButton, "clear_btn")
+        self.clear_all_btn = self._widget(QPushButton, "clear_all_btn")
+        self.retry_failed_btn = self._widget(QPushButton, "retry_failed_btn")
         self.queue_input_table = self._widget(QTableWidget, "queue_input_table")
         self.queue_status_table = self._widget(QTableWidget, "queue_status_table")
         self.output_edit = self._widget(QLineEdit, "output_edit")
@@ -127,7 +252,13 @@ class DesktopApp(QMainWindow):
         )
         self._configure_table_columns(
             self.research_table,
-            (QHeaderView.ResizeToContents, QHeaderView.Stretch, QHeaderView.ResizeToContents, QHeaderView.Stretch),
+            (
+                QHeaderView.ResizeToContents,
+                QHeaderView.Stretch,
+                QHeaderView.ResizeToContents,
+                QHeaderView.Stretch,
+                QHeaderView.ResizeToContents,
+            ),
         )
         self._configure_table_columns(
             self.history_table,
@@ -141,6 +272,17 @@ class DesktopApp(QMainWindow):
             ),
         )
         self.add_input_row()
+        for button in self.ui_root.findChildren(QPushButton):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._add_header_logo()
+
+    def _add_header_logo(self) -> None:
+        logo = QLabel()
+        logo.setPixmap(self.logo_icon.pixmap(QSize(52, 43)))
+        logo.setFixedSize(56, 46)
+        header_layout = self._widget(QFrame, "Header").layout()
+        header_layout.insertWidget(0, logo)
+        header_layout.insertSpacing(1, 6)
 
     def _widget(self, widget_type: type[WidgetT], name: str) -> WidgetT:
         widget = self.ui_root.findChild(widget_type, name)
@@ -159,6 +301,8 @@ class DesktopApp(QMainWindow):
         self.start_queue_btn.clicked.connect(self.start_queue)
         self.pause_queue_btn.clicked.connect(self.pause_queue)
         self.clear_btn.clicked.connect(self.clear_recent)
+        self.clear_all_btn.clicked.connect(self.clear_all)
+        self.retry_failed_btn.clicked.connect(self.retry_failed)
         self.pick_cookies_btn.clicked.connect(self.pick_cookies_file)
         self.upload_cookies_btn.clicked.connect(self.upload_cookies)
         self.open_logs_btn.clicked.connect(self.open_logs_folder)
@@ -180,6 +324,12 @@ class DesktopApp(QMainWindow):
         self.refresh_jobs(silent=True)
         if self.tabs.currentIndex() == 3:
             self.refresh_history(silent=True)
+        if not self.isVisible() and not self._notified_idle and not self.has_active_work():
+            self._notified_idle = True
+            self.tray.showMessage(
+                "Music Pipeline", "All downloads and research are finished.",
+                QSystemTrayIcon.MessageIcon.Information, 5000,
+            )
 
     def add_input_row(self) -> None:
         row = self.queue_input_table.rowCount()
@@ -287,6 +437,9 @@ class DesktopApp(QMainWindow):
             self._set_item(self.research_table, row, 1, item.get("title", ""))
             self._set_item(self.research_table, row, 2, f"{minutes}:{seconds:02d}")
             self._set_item(self.research_table, row, 3, item.get("url", ""))
+            combo = QComboBox()
+            combo.addItems(["audio", "video"])
+            self.research_table.setCellWidget(row, 4, combo)
         if not running:
             self.research_timer.stop()
 
@@ -297,7 +450,11 @@ class DesktopApp(QMainWindow):
             return
         folder = self.research.snapshot()["folder_name"] or "research"
         items = [
-            QueueItem(url=self.research_table.item(row, 3).text(), media_type="audio", folder_name=folder)
+            QueueItem(
+                url=self.research_table.item(row, 3).text(),
+                media_type=self.research_table.cellWidget(row, 4).currentText(),
+                folder_name=folder,
+            )
             for row in rows
         ]
         result = self.manager.submit(items)
@@ -307,9 +464,28 @@ class DesktopApp(QMainWindow):
     def clear_recent(self) -> None:
         try:
             cleared = self.manager.clear_recent()
-            self.statusBar().showMessage(f"Cleared {cleared} completed/failed rows", 5000)
+            self.statusBar().showMessage(f"Cleared {cleared} completed rows", 5000)
             self.refresh_jobs()
             self.refresh_history(silent=True)
+        except Exception as exc:
+            self._error(str(exc))
+
+    def clear_all(self) -> None:
+        try:
+            cleared = self.manager.clear_all()
+            self.statusBar().showMessage(f"Cleared {cleared} finished rows (queued/active kept)", 5000)
+            self.refresh_jobs()
+            self.refresh_history(silent=True)
+        except Exception as exc:
+            self._error(str(exc))
+
+    def retry_failed(self) -> None:
+        try:
+            retried = self.manager.retry_failed()
+            self.statusBar().showMessage(
+                f"Re-queued {retried} failed download(s)" if retried else "No failed downloads to retry", 5000
+            )
+            self.refresh_jobs()
         except Exception as exc:
             self._error(str(exc))
 

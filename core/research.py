@@ -8,12 +8,14 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import sqlite3
 import subprocess
 import threading
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from core.queue_manager import (
+    DB_PATH,
     LOGS_DIR,
     _SUBPROCESS_FLAGS,
     _js_runtime_args,
@@ -107,6 +109,7 @@ def research_artist(
     cancel: Optional[threading.Event] = None,
     on_item: Optional[Callable[[dict], None]] = None,
     save_log: bool = True,
+    seed_items: Optional[List[dict]] = None,
 ) -> dict:
     cancel = cancel or threading.Event()
     name = artist_cfg["name"]
@@ -125,7 +128,7 @@ def research_artist(
         if cancel.is_set():
             raise ResearchCancelled()
 
-    found: Dict[str, dict] = {}
+    found: Dict[str, dict] = {item["id"]: item for item in (seed_items or [])}
 
     def add(entry: dict, item_type: str, **extra: object) -> None:
         item = {
@@ -201,58 +204,166 @@ def research_artist(
 
 
 class ResearchManager:
-    """Runs one research job at a time in a background thread so UIs can poll it."""
+    """Runs one research job at a time in a background thread so UIs can poll it.
 
-    def __init__(self, cookies_path_provider: Callable[[], str]) -> None:
+    State is persisted to SQLite so a research job interrupted by a crash or shutdown
+    can be resumed (``resume_interrupted``) on the next launch.
+    """
+
+    def __init__(self, cookies_path_provider: Callable[[], str], db_path: Optional[Path] = None) -> None:
         self._cookies = cookies_path_provider
         self._lock = threading.Lock()
         self._cancel = threading.Event()
+        self._shutdown = False
         self._thread: Optional[threading.Thread] = None
-        self.status = "idle"  # idle | running | done | failed | cancelled
+        self.status = "idle"  # idle | running | done | failed | cancelled | interrupted
         self.artist = ""
         self.folder_name = ""
         self.log: List[str] = []
         self.items: List[dict] = []
         self.error = ""
+        self.cfg: dict = {}
+
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        self._db = sqlite3.connect(db_path or DB_PATH, check_same_thread=False)
+        self._db_lock = threading.Lock()
+        self._db_closed = False
+        with self._db_lock:
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS research_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL)"
+            )
+            self._db.commit()
+        self._load()
+
+    def _load(self) -> None:
+        with self._db_lock:
+            row = self._db.execute("SELECT data FROM research_state WHERE id = 1").fetchone()
+        if not row:
+            return
+        try:
+            data = json.loads(row[0])
+        except ValueError:
+            return
+        self.status = data.get("status", "idle")
+        self.artist = data.get("artist", "")
+        self.folder_name = data.get("folder_name", "")
+        self.log = list(data.get("log", []))
+        self.items = list(data.get("items", []))
+        self.error = data.get("error", "")
+        self.cfg = data.get("cfg", {})
+        # A job still marked running was killed mid-way (crash, kill, forced close).
+        if self.status == "running":
+            self.status = "interrupted"
+            self._persist()
+
+    def _persist(self) -> None:
+        if self._db_closed:
+            return
+        data = json.dumps(
+            {
+                "status": self.status,
+                "artist": self.artist,
+                "folder_name": self.folder_name,
+                "log": self.log[-300:],
+                "items": self.items,
+                "error": self.error,
+                "cfg": self.cfg,
+            },
+            ensure_ascii=False,
+        )
+        try:
+            with self._db_lock:
+                self._db.execute("INSERT OR REPLACE INTO research_state (id, data) VALUES (1, ?)", (data,))
+                self._db.commit()
+        except sqlite3.Error:
+            pass
+
+    @property
+    def resumable(self) -> bool:
+        return self.status == "interrupted" and bool(self.cfg.get("name"))
+
+    def is_active(self) -> bool:
+        return self.status == "running"
 
     def start(self, artist_cfg: dict) -> None:
         name = (artist_cfg.get("name") or "").strip()
         if not name:
             raise ValueError("Artist name is required")
+        self._launch({**artist_cfg, "name": name}, fresh=True)
+
+    def resume_interrupted(self) -> bool:
+        """Restart an interrupted job, keeping the items already found. Returns True if resumed."""
+        if not self.resumable:
+            return False
+        self._launch(dict(self.cfg), fresh=False)
+        return True
+
+    def _launch(self, cfg: dict, fresh: bool) -> None:
         with self._lock:
             if self.status == "running":
                 raise RuntimeError("A research job is already running")
             self._cancel = threading.Event()
+            self._shutdown = False
             self.status = "running"
-            self.artist = name
-            self.folder_name = safe_name(name).replace(" ", "_")
-            self.log = []
-            self.items = []
+            self.artist = cfg["name"]
+            self.folder_name = safe_name(cfg["name"]).replace(" ", "_")
+            self.cfg = cfg
             self.error = ""
-            cfg = {**artist_cfg, "name": name}
-            self._thread = threading.Thread(target=self._run, args=(cfg, self._cancel), daemon=True)
+            if fresh:
+                self.log = []
+                self.items = []
+            else:
+                self.log.append("Resuming interrupted research...")
+            seed = list(self.items)
+            self._persist()
+            self._thread = threading.Thread(target=self._run, args=(cfg, self._cancel, seed), daemon=True)
             self._thread.start()
 
     def cancel(self) -> None:
         self._cancel.set()
 
-    def _run(self, cfg: dict, cancel: threading.Event) -> None:
+    def interrupt(self) -> None:
+        """Stop for app shutdown while keeping the job resumable on next launch."""
+        self._shutdown = True
+        self._cancel.set()
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=5)
+        if self.status == "running":
+            self.status = "interrupted"
+            self._persist()
+        self._db_closed = True
+
+    def _log(self, line: str) -> None:
+        self.log.append(line)
+        self._persist()
+
+    def _add_item(self, item: dict) -> None:
+        self.items.append(item)
+        self._persist()
+
+    def _run(self, cfg: dict, cancel: threading.Event, seed: List[dict]) -> None:
         try:
             research_artist(
                 cfg,
                 cookies_path=self._cookies(),
-                log=self.log.append,
+                log=self._log,
                 cancel=cancel,
-                on_item=self.items.append,
+                on_item=self._add_item,
+                seed_items=seed,
             )
             self.status = "done"
         except ResearchCancelled:
-            self.log.append("Research cancelled.")
-            self.status = "cancelled"
+            if self._shutdown:
+                self.status = "interrupted"
+            else:
+                self.log.append("Research cancelled.")
+                self.status = "cancelled"
         except Exception as exc:
             self.error = str(exc)
             self.log.append(f"ERROR: {exc}")
             self.status = "failed"
+        self._persist()
 
     def snapshot(self) -> dict:
         return {
@@ -260,6 +371,9 @@ class ResearchManager:
             "artist": self.artist,
             "folder_name": self.folder_name,
             "error": self.error,
+            "resumable": self.resumable,
             "log": list(self.log[-300:]),
             "items": list(self.items),
         }
+
+

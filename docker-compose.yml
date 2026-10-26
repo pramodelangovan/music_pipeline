@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     image: music-pipeline-api:latest
@@ -14,8 +12,6 @@ services:
       - PATH=/opt/deno/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - ./downloads:/app/downloads
-      - ./logs:/app/logs
-      - ./cookies.txt:/app/cookies.txt
       - deno_cache:/opt/deno
     ports:
       - "0.0.0.0:8000:8000"

@@ -2,7 +2,7 @@ QWidget {
     background: #f5f8ff;
     color: #1f2a37;
     font-family: "Segoe UI";
-    font-size: 13px;
+    font-size: 10pt;
 }
 
 QMainWindow {
@@ -21,13 +21,13 @@ QFrame#Header {
 
 QLabel#HeaderTitle {
     color: white;
-    font-size: 19px;
+    font-size: 14pt;
     font-weight: 700;
 }
 
 QLabel#HeaderMeta, QLabel#active_jobs_label {
     color: #dbe8ff;
-    font-size: 12px;
+    font-size: 9pt;
 }
 
 QTabWidget::pane {
@@ -62,10 +62,22 @@ QPushButton {
 
 QPushButton:hover {
     background: #0f58c9;
+    border: 1px solid #7fa8ee;
+}
+
+QPushButton:pressed {
+    background: #0a3f99;
+    padding-top: 10px;
+    padding-bottom: 6px;
+}
+
+QPushButton:focus {
+    border: 2px solid #8fb4f5;
 }
 
 QPushButton:disabled {
     background: #9eb8e8;
+    border: none;
 }
 
 QPushButton#pause_queue_btn,
@@ -73,16 +85,80 @@ QPushButton#research_cancel_btn,
 QPushButton#research_select_all_btn,
 QPushButton#browse_folder_btn,
 QPushButton#pick_cookies_btn,
-QPushButton#refresh_history_btn {
+QPushButton#refresh_history_btn,
+QPushButton#retry_failed_btn {
     background: #e7eefb;
     color: #214b8f;
     border: 1px solid #bfd2f3;
 }
 
+QPushButton#pause_queue_btn:hover,
+QPushButton#research_cancel_btn:hover,
+QPushButton#research_select_all_btn:hover,
+QPushButton#browse_folder_btn:hover,
+QPushButton#pick_cookies_btn:hover,
+QPushButton#refresh_history_btn:hover,
+QPushButton#retry_failed_btn:hover {
+    background: #d3e2fb;
+    border: 1px solid #7fa8ee;
+}
+
+QPushButton#pause_queue_btn:pressed,
+QPushButton#research_cancel_btn:pressed,
+QPushButton#research_select_all_btn:pressed,
+QPushButton#browse_folder_btn:pressed,
+QPushButton#pick_cookies_btn:pressed,
+QPushButton#refresh_history_btn:pressed,
+QPushButton#retry_failed_btn:pressed {
+    background: #b7cff5;
+}
+
+QPushButton#pause_queue_btn:disabled,
+QPushButton#research_cancel_btn:disabled {
+    background: #f0f3f9;
+    color: #9aa8c2;
+    border: 1px solid #dde5f3;
+}
+
 QPushButton#clear_btn,
+QPushButton#clear_all_btn,
 QPushButton#clear_history_btn {
     background: #f5b742;
     color: #263238;
+}
+
+QPushButton#clear_btn:hover,
+QPushButton#clear_all_btn:hover,
+QPushButton#clear_history_btn:hover {
+    background: #f0a21b;
+    border: 1px solid #c98200;
+}
+
+QPushButton#clear_btn:pressed,
+QPushButton#clear_all_btn:pressed,
+QPushButton#clear_history_btn:pressed {
+    background: #d98f0a;
+}
+
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover {
+    border: 1px solid #7fa8ee;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+    border: 2px solid #1a66dc;
+}
+
+QTabBar::tab:hover:!selected {
+    background: #cddff9;
+}
+
+QTableWidget::item:hover {
+    background: #eaf2ff;
+}
+
+QTableWidget::item:selected {
+    background: #cfe0fb;
+    color: #14284b;
 }
 
 QLineEdit, QComboBox, QSpinBox {

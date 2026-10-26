@@ -1,4 +1,6 @@
-# 🎵 Music Pipeline
+<p align="center"><img src="resources/music-pipeline.svg" alt="Music Pipeline logo" width="160"></p>
+
+# Music Pipeline
 
 Music Pipeline downloads YouTube music (single videos or whole playlists) as MP3/video through a download queue, tags audio with metadata and cover art, and keeps a history of every job.
 
@@ -48,8 +50,8 @@ It ships as two tools that share the same engine (`core/`):
 1. Open **Settings**: set the gap between downloads and import `cookies.txt`.
 2. Open **Queue**: add one or more rows (URL, audio/video, target folder) and click **Queue Downloads**.
 3. Click **Start Queue** to begin, **Pause Queue** to pause. Playlists are expanded into one job per track.
-4. **Clear Last Downloads** removes finished items from the Queue view (history is kept).
-5. Open **Research** to search for music, tick the results and click **Queue Selected (Audio)**.
+4. **Retry Failed** re-queues failed items; **Clear Completed** hides successful items from the Queue view; **Clear All** hides every finished item (queued/active ones stay). History is kept.
+5. Open **Research** to search for music, tick the results, choose Audio or Video per row and click **Queue Selected**.
 6. Open **History** to see every past job; **Clear History** deletes finished/failed entries (queued and active jobs stay).
 
 If ffmpeg or Deno is missing at runtime, the app installs them automatically.
@@ -85,9 +87,9 @@ Requirements: Docker with Compose v2, and the Docker daemon running.
 
 1. Open **Settings**: upload `cookies.txt` and set the queue gap.
 2. Open **Queue**: add rows (URL, audio/video, target folder) and queue them; playlists expand into per-track jobs.
-3. **Clear Last Downloads** hides finished items from the Queue; **History** keeps everything.
+3. **Retry Failed**, **Clear Completed** and **Clear All** work as in the desktop app; **History** keeps everything.
 4. In **History**, **Clear History** deletes finished/failed entries.
-5. Files appear in `./downloads`; logs and the job database (`logs/downloads.db`) are in `./logs`.
+5. Files appear in `./downloads`. Logs, uploaded cookies and the job database live inside the container only (not on the host) and survive container restarts, but are lost if the container is removed/recreated. Use the web app's **Logs** tab to browse log folders and view the latest entries in `.log` files.
 
 ### Run the web app without Docker
 

@@ -20,11 +20,13 @@ from ui import DesktopApp, load_stylesheet
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     load_stylesheet(app)
     window = DesktopApp()
-    app.aboutToQuit.connect(window.research.cancel)
+    app.aboutToQuit.connect(window.research.interrupt)
     app.aboutToQuit.connect(window.manager.stop)
     window.show()
+    window.offer_resume()
     return app.exec()
 
 

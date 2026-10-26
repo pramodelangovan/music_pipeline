@@ -37,9 +37,23 @@ def _user_data_dir() -> Path:
     return base / "MusicPipeline"
 
 
-# Packaged app: data lives in the user folder. Source/Docker: next to the project.
-DATA_DIR = _user_data_dir() if getattr(sys, "frozen", False) else ROOT_DIR
+# Docker (MP_DOWNLOAD_ROOT set): data stays inside the container. Desktop (source or packaged):
+# data lives in a hidden per-user folder, never next to the project or the exe.
+_IN_DOCKER = bool(os.environ.get("MP_DOWNLOAD_ROOT", "").strip())
+DATA_DIR = ROOT_DIR if _IN_DOCKER else _user_data_dir()
 LOGS_DIR = DATA_DIR / "logs"
+
+
+def _hide_path(path: Path) -> None:
+    """Mark the app data folder hidden on Windows (dot-prefixed folders are hidden elsewhere)."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.SetFileAttributesW(str(path), 0x2)
+    except Exception:
+        pass
 
 COOKIES_PATH = DATA_DIR / "cookies.txt"
 DEFAULT_GAP_SECONDS = 12
@@ -147,6 +161,7 @@ class QueueItem:
     url: str
     media_type: Literal["audio", "video"] = "audio"
     folder_name: str = "youtube_playlist"
+    id: str = ""
 
 
 @dataclass
@@ -172,7 +187,7 @@ class DownloadManager:
         self.settings_path = (
             LOGS_DIR / "runtime_settings.docker.json" if self.restricted else RUNTIME_SETTINGS_PATH
         )
-        self.cookies_path = str(COOKIES_PATH)
+        self.cookies_path = str(LOGS_DIR / "cookies.txt" if self.restricted else COOKIES_PATH)
         if self.restricted:
             self.output_base = str(self.download_root)
         else:
@@ -195,11 +210,15 @@ class DownloadManager:
 
         Path(self.output_base).mkdir(parents=True, exist_ok=True)
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        if not self.restricted:
+            _hide_path(DATA_DIR)
         self.db = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self._current_proc: Optional[subprocess.Popen] = None
         self._init_db()
-        # Jobs left over from a previous run wait for an explicit Start Queue.
-        if self._recover_jobs():
+        # Work left over from a previous run waits for an explicit Start Queue (or resume()).
+        recovered_inbox = self._recover_inbox()
+        if self._recover_jobs() or recovered_inbox:
             self.run_event.clear()
 
         self.queue_agent = threading.Thread(target=self._queue_agent_loop, daemon=True)
@@ -224,7 +243,40 @@ class DownloadManager:
                 )
                 """
             )
+            # URLs accepted but not yet expanded into jobs; survives crashes/restarts.
+            self.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS inbox (
+                    id TEXT PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    folder_name TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
             self.db.commit()
+
+    def _recover_inbox(self) -> int:
+        with self.db_lock:
+            rows = self.db.execute(
+                "SELECT id, url, media_type, folder_name FROM inbox ORDER BY created_at ASC"
+            ).fetchall()
+        for row in rows:
+            self.inbox_queue.put(QueueItem(row["url"], row["media_type"], row["folder_name"], row["id"]))
+        return len(rows)
+
+    def has_active_work(self) -> bool:
+        """True if any download is queued/running or URLs are waiting to be expanded."""
+        with self.db_lock:
+            row = self.db.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM downloads WHERE cleared = 0 AND status IN ('queued', 'downloading'))
+                  + (SELECT COUNT(*) FROM inbox) AS n
+                """
+            ).fetchone()
+        return bool(row["n"])
 
     def _load_runtime_settings(self) -> None:
         if not self.settings_path.exists():
@@ -275,6 +327,13 @@ class DownloadManager:
 
     def stop(self) -> None:
         self.stop_event.set()
+        # Kill the running download; its job stays 'downloading' in the DB and is re-queued on next start.
+        proc = self._current_proc
+        if proc and proc.poll() is None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
         try:
             self.db.close()
         except Exception:
@@ -283,6 +342,13 @@ class DownloadManager:
     def submit(self, items: List[QueueItem]) -> dict:
         accepted = 0
         for item in items:
+            item.id = item.id or str(uuid.uuid4())
+            with self.db_lock:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO inbox (id, url, media_type, folder_name, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (item.id, item.url, item.media_type, item.folder_name, datetime.now(timezone.utc).isoformat()),
+                )
+                self.db.commit()
             self.inbox_queue.put(item)
             accepted += 1
         return {"accepted": accepted}
@@ -370,25 +436,55 @@ class DownloadManager:
         return [dict(row) for row in rows]
 
     def clear_recent(self) -> int:
+        """Hide successfully finished jobs from the queue view (history is kept)."""
+        return self._clear_view(("done",))
+
+    def clear_all(self) -> int:
+        """Hide every finished job (successful and failed). Queued/active jobs are kept."""
+        return self._clear_view(("done", "failed"))
+
+    def _clear_view(self, statuses: tuple) -> int:
         with self.lock:
-            finished_ids = [
-                job_id
-                for job_id, job in self.jobs.items()
-                if job.status in ("done", "failed")
-            ]
+            finished_ids = [job_id for job_id, job in self.jobs.items() if job.status in statuses]
             for job_id in finished_ids:
                 del self.jobs[job_id]
 
+        marks = ",".join("?" for _ in statuses)
         with self.db_lock:
             cur = self.db.execute(
-                """
-                UPDATE downloads
-                SET cleared = 1
-                WHERE cleared = 0 AND status IN ('done', 'failed')
-                """
+                f"UPDATE downloads SET cleared = 1 WHERE cleared = 0 AND status IN ({marks})", statuses
             )
             self.db.commit()
             return int(cur.rowcount)
+
+    def retry_failed(self) -> int:
+        """Re-queue every failed job that is still visible in the queue view."""
+        with self.db_lock:
+            rows = self.db.execute(
+                """
+                SELECT id, source_url, resolved_url, media_type, folder_name, created_at
+                FROM downloads
+                WHERE cleared = 0 AND status = 'failed'
+                ORDER BY created_at ASC
+                """
+            ).fetchall()
+        retried = []
+        with self.lock:
+            for row in rows:
+                job = DownloadJob(
+                    id=row["id"],
+                    source_url=row["source_url"],
+                    resolved_url=row["resolved_url"],
+                    media_type=row["media_type"],
+                    folder_name=row["folder_name"],
+                    created_at=row["created_at"],
+                )
+                self.jobs[job.id] = job
+                retried.append(job)
+        for job in retried:
+            self._persist_job(job)
+            self.download_queue.put(job)
+        return len(retried)
 
     def clear_history(self) -> int:
         with self.lock:
@@ -451,7 +547,15 @@ class DownloadManager:
     def update_cookies(self, uploaded_text: str) -> dict:
         if not uploaded_text.strip():
             raise ValueError("Uploaded cookie file is empty")
-        Path(self.cookies_path).write_text(uploaded_text, encoding="utf-8")
+        target = Path(self.cookies_path)
+        # A directory here (e.g. created by a Docker bind mount) blocks writing; clear it if empty.
+        if target.is_dir():
+            try:
+                target.rmdir()
+            except OSError as exc:
+                raise ValueError(f"{target} is a folder, not a file. Remove it and try again.") from exc
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(uploaded_text, encoding="utf-8")
         self._save_runtime_settings()
         return self.get_settings()
 
@@ -510,6 +614,10 @@ class DownloadManager:
                     self.jobs[failed_job.id] = failed_job
                 self._persist_job(failed_job)
             finally:
+                if item.id and not self.stop_event.is_set():
+                    with self.db_lock:
+                        self.db.execute("DELETE FROM inbox WHERE id = ?", (item.id,))
+                        self.db.commit()
                 self.inbox_queue.task_done()
 
     def _download_agent_loop(self) -> None:
@@ -535,6 +643,8 @@ class DownloadManager:
                     self._persist_job(tracked)
 
             success, err = self._run_download(job)
+            if self.stop_event.is_set():
+                return  # interrupted by shutdown: leave 'downloading' so it resumes next launch
             with self.lock:
                 tracked = self.jobs.get(job.id)
                 if tracked:
@@ -614,10 +724,18 @@ class DownloadManager:
             ]
 
         cmd += _js_runtime_args()
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, creationflags=_SUBPROCESS_FLAGS, env=_subprocess_env()
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            creationflags=_SUBPROCESS_FLAGS,
+            env=_subprocess_env(),
         )
-        if result.returncode == 0:
+        self._current_proc = proc
+        stdout, stderr = proc.communicate()
+        self._current_proc = None
+        if proc.returncode == 0:
             return True, ""
-        detail = (result.stderr or result.stdout or "Unknown download error").strip()
+        detail = (stderr or stdout or "Unknown download error").strip()
         return False, detail[-1200:]

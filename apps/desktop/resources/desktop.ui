@@ -42,7 +42,9 @@
          <item><widget class="QPushButton" name="start_queue_btn"><property name="text"><string>Start Queue</string></property></widget></item>
          <item><widget class="QPushButton" name="pause_queue_btn"><property name="text"><string>Pause Queue</string></property></widget></item>
          <item><spacer name="queueActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
-         <item><widget class="QPushButton" name="clear_btn"><property name="text"><string>Clear Last Downloads</string></property></widget></item>
+         <item><widget class="QPushButton" name="retry_failed_btn"><property name="text"><string>Retry Failed</string></property></widget></item>
+         <item><widget class="QPushButton" name="clear_btn"><property name="text"><string>Clear Completed</string></property></widget></item>
+         <item><widget class="QPushButton" name="clear_all_btn"><property name="text"><string>Clear All</string></property></widget></item>
         </layout>
        </item>
        <item><widget class="QLabel" name="downloadInputsLabel"><property name="text"><string>Download Inputs</string></property></widget></item>
@@ -98,13 +100,14 @@
          <column><property name="text"><string>Title</string></property></column>
          <column><property name="text"><string>Duration</string></property></column>
          <column><property name="text"><string>URL</string></property></column>
+         <column><property name="text"><string>Download as</string></property></column>
         </widget>
        </item>
        <item>
         <layout class="QHBoxLayout" name="researchQueueActions">
          <item><widget class="QPushButton" name="research_select_all_btn"><property name="text"><string>Select All</string></property></widget></item>
          <item><spacer name="researchQueueSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
-         <item><widget class="QPushButton" name="research_queue_btn"><property name="text"><string>Queue Selected (Audio)</string></property></widget></item>
+         <item><widget class="QPushButton" name="research_queue_btn"><property name="text"><string>Queue Selected</string></property></widget></item>
         </layout>
        </item>
       </layout>

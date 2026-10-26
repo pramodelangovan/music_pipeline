@@ -3,6 +3,7 @@ import {
   Alert,
   AppBar,
   Box,
+  Breadcrumbs,
   Button,
   Card,
   CardContent,
@@ -14,7 +15,13 @@ import {
   IconButton,
   InputLabel,
   LinearProgress,
+  Link,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   MenuItem,
+  Paper,
   Select,
   Stack,
   Tab,
@@ -30,6 +37,9 @@ import {
 } from "@mui/material";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
@@ -78,12 +88,18 @@ export default function App() {
   });
   const [research, setResearch] = useState({ status: "idle", log: [], items: [], folder_name: "" });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [researchMedia, setResearchMedia] = useState({});
   const [paused, setPaused] = useState(false);
   const [setupMessage, setSetupMessage] = useState("");
   const [outputBase, setOutputBase] = useState("");
   const [downloadRoot, setDownloadRoot] = useState(null);
   const [cookiesFile, setCookiesFile] = useState(null);
   const [cookiesStatus, setCookiesStatus] = useState(false);
+  const [logDirectory, setLogDirectory] = useState("");
+  const [logEntries, setLogEntries] = useState([]);
+  const [selectedLog, setSelectedLog] = useState("");
+  const [logContent, setLogContent] = useState("");
+  const [logsError, setLogsError] = useState("");
 
   const pendingJobs = useMemo(() => jobs.filter((j) => j.status === "queued" || j.status === "downloading"), [jobs]);
 
@@ -148,7 +164,7 @@ export default function App() {
     const folder = research.folder_name || "research";
     const items = research.items
       .filter((item) => selectedIds.includes(item.id))
-      .map((item) => ({ url: item.url, media_type: "audio", folder_name: folder }));
+      .map((item) => ({ url: item.url, media_type: researchMedia[item.id] || "audio", folder_name: folder }));
     if (items.length === 0) {
       setError("Select at least one result to queue.");
       return;
@@ -222,6 +238,41 @@ export default function App() {
     setHistoryRows(payload.history || []);
   };
 
+  const fetchLogDirectory = async (path) => {
+    const query = new URLSearchParams();
+    if (path) {
+      query.set("path", path);
+    }
+    const res = await fetch(`${API_BASE}/logs?${query.toString()}`);
+    const payload = await parseResponse(res);
+    if (!res.ok) {
+      throw new Error(payload.detail || "Failed to list logs");
+    }
+    setLogEntries(payload.entries || []);
+  };
+
+  const fetchLogContent = async (path) => {
+    const query = new URLSearchParams({ path, lines: "200" });
+    const res = await fetch(`${API_BASE}/logs/content?${query.toString()}`);
+    const payload = await parseResponse(res);
+    if (!res.ok) {
+      throw new Error(payload.detail || "Failed to read log");
+    }
+    setLogContent(payload.content || "");
+  };
+
+  const refreshLogs = async () => {
+    try {
+      setLogsError("");
+      await fetchLogDirectory(logDirectory);
+      if (selectedLog) {
+        await fetchLogContent(selectedLog);
+      }
+    } catch (err) {
+      setLogsError(err.message || "Failed to refresh logs");
+    }
+  };
+
   useEffect(() => {
     const loadInitial = async () => {
       try {
@@ -238,7 +289,7 @@ export default function App() {
     const timer = setInterval(async () => {
       try {
         await fetchJobs();
-        if (tab === 3) {
+        if (tab === 4) {
           await fetchHistory();
         }
       } catch {
@@ -259,6 +310,16 @@ export default function App() {
       clearInterval(researchTimer);
     };
   }, [tab, research.status]);
+
+  useEffect(() => {
+    if (tab !== 3) {
+      return undefined;
+    }
+
+    refreshLogs();
+    const logsTimer = setInterval(refreshLogs, 5000);
+    return () => clearInterval(logsTimer);
+  }, [tab, logDirectory, selectedLog]);
 
   const addRow = () => setRows((current) => [...current, makeRow()]);
   const removeRow = (id) => {
@@ -365,9 +426,42 @@ export default function App() {
       }
       await fetchJobs();
       await fetchHistory();
-      setMessage(`Cleared ${payload.cleared || 0} recent completed rows from download page.`);
+      setMessage(`Cleared ${payload.cleared || 0} completed rows from download page.`);
     } catch (err) {
       setError(err.message || "Failed to clear recent downloads");
+    }
+  };
+
+  const clearAllDownloads = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/jobs/clear-all`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to clear downloads");
+      }
+      await fetchJobs();
+      await fetchHistory();
+      setMessage(`Cleared ${payload.cleared || 0} finished rows (queued/active kept).`);
+    } catch (err) {
+      setError(err.message || "Failed to clear downloads");
+    }
+  };
+
+  const retryFailedDownloads = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/jobs/retry-failed`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to retry downloads");
+      }
+      await fetchJobs();
+      setMessage(payload.retried ? `Re-queued ${payload.retried} failed download(s).` : "No failed downloads to retry.");
+    } catch (err) {
+      setError(err.message || "Failed to retry downloads");
     }
   };
 
@@ -396,6 +490,7 @@ export default function App() {
       <Container maxWidth="lg">
         <AppBar position="static" elevation={0} sx={{ borderRadius: 3, bgcolor: "white", color: "#122847" }}>
           <Toolbar>
+            <Box component="img" src="/music-pipeline.svg" alt="Music Pipeline logo" sx={{ height: 40, mr: 1.5 }} />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               Music Pipeline
             </Typography>
@@ -409,6 +504,7 @@ export default function App() {
               <Tab label="Queue" />
               <Tab label="Research" />
               <Tab label="Settings" />
+              <Tab label="Logs" />
               <Tab label="History" />
             </Tabs>
 
@@ -487,6 +583,7 @@ export default function App() {
                         <TableCell>Title</TableCell>
                         <TableCell>Duration</TableCell>
                         <TableCell>URL</TableCell>
+                        <TableCell>Download as</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -505,6 +602,16 @@ export default function App() {
                               {item.url}
                             </a>
                           </TableCell>
+                          <TableCell>
+                            <Select
+                              size="small"
+                              value={researchMedia[item.id] || "audio"}
+                              onChange={(e) => setResearchMedia((cur) => ({ ...cur, [item.id]: e.target.value }))}
+                            >
+                              <MenuItem value="audio">Audio</MenuItem>
+                              <MenuItem value="video">Video</MenuItem>
+                            </Select>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -512,7 +619,7 @@ export default function App() {
 
                   <Stack direction="row" justifyContent="flex-end">
                     <Button variant="contained" onClick={queueSelectedResearch} disabled={selectedIds.length === 0}>
-                      Queue Selected (Audio)
+                      Queue Selected
                     </Button>
                   </Stack>
                 </Stack>
@@ -582,9 +689,15 @@ export default function App() {
                 <Typography variant="h6" sx={{ mt: 4, mb: 1 }}>
                   Queue Status
                 </Typography>
-                <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mb: 1 }}>
+                  <Button variant="outlined" onClick={retryFailedDownloads}>
+                    Retry Failed
+                  </Button>
                   <Button variant="text" color="warning" onClick={clearRecentDownloads}>
-                    Clear Last Downloads
+                    Clear Completed
+                  </Button>
+                  <Button variant="text" color="error" onClick={clearAllDownloads}>
+                    Clear All
                   </Button>
                 </Stack>
                 <Table size="small">
@@ -676,6 +789,109 @@ export default function App() {
             )}
 
             {tab === 3 && (
+              <Box sx={{ mt: 3 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                  <Breadcrumbs aria-label="Logs folder">
+                    <Link
+                      component="button"
+                      underline="hover"
+                      color={logDirectory ? "inherit" : "text.primary"}
+                      onClick={() => {
+                        setLogDirectory("");
+                        setSelectedLog("");
+                        setLogContent("");
+                      }}
+                    >
+                      logs
+                    </Link>
+                    {logDirectory.split("/").filter(Boolean).map((part, index, parts) => {
+                      const path = parts.slice(0, index + 1).join("/");
+                      return (
+                        <Link
+                          key={path}
+                          component="button"
+                          underline="hover"
+                          color={index === parts.length - 1 ? "text.primary" : "inherit"}
+                          onClick={() => {
+                            setLogDirectory(path);
+                            setSelectedLog("");
+                            setLogContent("");
+                          }}
+                        >
+                          {part}
+                        </Link>
+                      );
+                    })}
+                  </Breadcrumbs>
+                  <Button variant="outlined" startIcon={<RefreshIcon />} onClick={refreshLogs}>
+                    Refresh
+                  </Button>
+                </Stack>
+
+                {logsError && <Alert severity="error" sx={{ mb: 2 }}>{logsError}</Alert>}
+
+                <Paper variant="outlined" sx={{ mb: 2, maxHeight: 240, overflow: "auto" }}>
+                  <List dense disablePadding>
+                    {logEntries.map((entry) => {
+                      const path = logDirectory ? `${logDirectory}/${entry.name}` : entry.name;
+                      const isDirectory = entry.type === "directory";
+                      return (
+                        <ListItemButton
+                          key={path}
+                          selected={!isDirectory && selectedLog === path}
+                          onClick={() => {
+                            if (isDirectory) {
+                              setLogDirectory(path);
+                              setSelectedLog("");
+                              setLogContent("");
+                              setLogsError("");
+                              return;
+                            }
+                            setSelectedLog(path);
+                            setLogsError("");
+                            fetchLogContent(path).catch((err) => setLogsError(err.message || "Failed to read log"));
+                          }}
+                        >
+                          <ListItemIcon>
+                            {isDirectory ? <FolderOutlinedIcon /> : <InsertDriveFileOutlinedIcon />}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={entry.name}
+                            secondary={isDirectory ? "Folder" : `${entry.size_bytes} bytes`}
+                          />
+                        </ListItemButton>
+                      );
+                    })}
+                    {logEntries.length === 0 && (
+                      <ListItemText sx={{ px: 2, py: 1 }} primary="No log files or folders here." />
+                    )}
+                  </List>
+                </Paper>
+
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  {selectedLog ? `Recent entries — ${selectedLog}` : "Recent log entries"}
+                </Typography>
+                <Box
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    p: 1.5,
+                    minHeight: 220,
+                    maxHeight: 480,
+                    overflow: "auto",
+                    bgcolor: "#f4f6fb",
+                    borderRadius: 1,
+                    fontSize: 12,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {selectedLog ? logContent || "This log file is empty." : "Select a .log file to view its latest entries."}
+                </Box>
+              </Box>
+            )}
+
+            {tab === 4 && (
               <Box sx={{ mt: 3 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                   <Typography variant="h6">Download History</Typography>

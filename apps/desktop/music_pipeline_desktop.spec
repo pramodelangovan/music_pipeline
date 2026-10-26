@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         (str(root / "resources" / "style.qss"), "resources"),
         (str(root / "resources" / "desktop.ui"), "resources"),
+        (str(root.parent.parent / "resources" / "music-pipeline.svg"), "resources"),
         (str(root.parent.parent / "tools" / "setup.ps1"), "tools"),
         (str(root.parent.parent / "tools" / "setup.sh"), "tools"),
     ],
@@ -41,4 +42,5 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon=str(root.parent.parent / "resources" / "music-pipeline.ico"),
 )
