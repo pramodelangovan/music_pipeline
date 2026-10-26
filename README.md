@@ -17,10 +17,10 @@ Don't want to build anything? Grab the files from the release page:
 
 | File | For | Release |
 |------|-----|---------|
-| `MusicPipeline.exe` | Desktop app (Windows) | [Download](https://github.com/pramodelangovan/music_pipeline/releases/latest) <!-- TODO: replace with the direct asset link, e.g. .../releases/download/vX.Y.Z/MusicPipeline.exe --> |
-| `docker.tar.gz` + `docker-compose.yml` | Web app (Docker images and compose file) | [Download](https://github.com/pramodelangovan/music_pipeline/releases/latest) <!-- TODO: replace with the direct asset links --> |
+| `MusicPipeline.exe` | Desktop app (Windows) | [Download](https://github.com/pramodelangovan/music_pipeline/releases/download/V0.01/MusicPipeline.exe) <!-- TODO: replace with the direct asset link, e.g. .../releases/download/vX.Y.Z/MusicPipeline.exe --> |
+| `docker.tar.gz`  | Web app (Docker images) | [Download](https://github.com/pramodelangovan/music_pipeline/releases/download/V0.01/docker.tar.gz) <!-- TODO: replace with the direct asset links --> |
 
-Release page: <https://github.com/pramodelangovan/music_pipeline/releases> <!-- TODO: confirm this URL once the first release is published -->
+[Release page](https://github.com/pramodelangovan/music_pipeline/releases) <!-- TODO: confirm this URL once the first release is published -->
 
 ### Install the desktop app (`MusicPipeline.exe`)
 
