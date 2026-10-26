@@ -11,6 +11,39 @@ It ships as two tools that share the same engine (`core/`):
 | **Desktop app** | PySide6 window, runs the queue in-process | `tools\build.ps1 desktop` (or run from source) |
 | **Web app** | FastAPI backend + React UI in Docker | `tools\build.ps1 web` / `web-build` |
 
+## Downloads (prebuilt)
+
+Don't want to build anything? Grab the files from the release page:
+
+| File | For | Release |
+|------|-----|---------|
+| `MusicPipeline.exe` | Desktop app (Windows) | [Download](https://github.com/pramodelangovan/music_pipeline/releases/latest) <!-- TODO: replace with the direct asset link, e.g. .../releases/download/vX.Y.Z/MusicPipeline.exe --> |
+| `docker.tar.gz` + `docker-compose.yml` | Web app (Docker images and compose file) | [Download](https://github.com/pramodelangovan/music_pipeline/releases/latest) <!-- TODO: replace with the direct asset links --> |
+
+Release page: <https://github.com/pramodelangovan/music_pipeline/releases> <!-- TODO: confirm this URL once the first release is published -->
+
+### Install the desktop app (`MusicPipeline.exe`)
+
+1. Download `MusicPipeline.exe` from the release page and put it in any folder.
+2. Double-click it. Windows SmartScreen may warn about an unsigned app: choose **More info → Run anyway**.
+3. Open **Settings**, import your `cookies.txt` and set the download folder (see [One-time setup](#1-one-time-setup-both-tools) step 3 for exporting cookies).
+4. Closing the window while work is running asks whether to keep running in the system tray. Unfinished downloads and research are saved and offered for resuming on the next launch.
+
+### Install the web app (`docker.tar.gz`)
+
+Requires only Docker with Compose v2.
+
+1. Download `docker.tar.gz` and `docker-compose.yml` from the release page into one folder.
+2. In that folder, run:
+   ```bash
+   docker load -i docker.tar.gz
+   mkdir downloads
+   docker compose up -d
+   ```
+3. Open `http://localhost:3000` (or `http://<server-ip>:3000`), go to **Settings** and upload `cookies.txt`.
+4. Downloads and research keep running in the container even if the browser is closed, and resume automatically after a container restart.
+5. Update: load the new `docker.tar.gz`, then run `docker compose up -d` again. Stop with `docker compose down`.
+
 ---
 
 ## 1. One-time setup (both tools)
@@ -38,7 +71,7 @@ It ships as two tools that share the same engine (`core/`):
    - Linux/macOS: `bash tools/build.sh desktop`
 3. The app is created as a single file: `dist\MusicPipeline.exe` (Linux/macOS: `dist/MusicPipeline`).
 4. Copy that one file anywhere and run it. Downloads go to a `downloads` folder in the directory you launch it from.
-5. Logs, history and `cookies.txt` are stored in your user folder (`%LOCALAPPDATA%\MusicPipeline` on Windows, `~/.local/share/MusicPipeline` on Linux, `~/Library/Application Support/MusicPipeline` on macOS). Use **Settings → Open Logs Folder** to view them.
+5. Logs, history and `cookies.txt` are stored in a hidden per-user folder, also when running from source (`%LOCALAPPDATA%\MusicPipeline` on Windows, `~/.local/share/MusicPipeline` on Linux, `~/Library/Application Support/MusicPipeline` on macOS). Use **Settings → Open Logs Folder** to view them.
 
 ### Run from source (no build)
 
@@ -79,7 +112,7 @@ Requirements: Docker with Compose v2, and the Docker daemon running.
 3. Copy that folder to the target machine (which only needs Docker).
 4. On the target, in that folder:
    1. `docker load -i docker.tar.gz`
-   2. `mkdir downloads logs`
+   2. `mkdir downloads`
    3. `docker compose up -d`
 5. Open `http://<target-host>:3000`.
 
@@ -119,5 +152,5 @@ music_pipeline/
 - **`Sign in to confirm you're not a bot`**: refresh `cookies.txt` and retry.
 - **`Requested format is not available`**: make sure Deno is installed and on PATH (rerun the setup script).
 - **`ffmpeg not found`**: rerun the setup script, then restart the terminal.
-- **Metadata missing**: check `logs/` and that `mutagen` is installed.
+- **Metadata missing**: check the logs folder (**Settings → Open Logs Folder** on desktop, the **Logs** tab on web) and that `mutagen` is installed.
 - **`The Docker daemon is not running`**: start Docker Desktop and rerun the build.
