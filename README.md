@@ -26,12 +26,17 @@ Don't want to build anything? Grab the files from the release page:
 
 1. Download `MusicPipeline.exe` from the release page and put it in any folder.
 2. Double-click it. Windows SmartScreen may warn about an unsigned app: choose **More info → Run anyway**.
-3. Open **Settings**, import your `cookies.txt` and set the download folder (see [One-time setup](#1-one-time-setup-both-tools) step 3 for exporting cookies).
-4. Closing the window while work is running asks whether to keep running in the system tray. Unfinished downloads and research are saved and offered for resuming on the next launch.
+3. **First run needs internet.** The exe bundles yt-dlp but not ffmpeg or Deno. If either is missing, the app installs them automatically (via `winget`, or `choco`/`scoop` for ffmpeg) before the first download, and the status bar shows "Installing missing dependencies...". If that fails (offline, or no package manager), install them manually and restart the app:
+   ```powershell
+   winget install Gyan.FFmpeg
+   winget install DenoLand.Deno
+   ```
+4. Open **Settings**, import your `cookies.txt` and set the download folder (see [One-time setup](#1-one-time-setup-both-tools) step 3 for exporting cookies).
+5. Closing the window while work is running asks whether to keep running in the system tray. Unfinished downloads and research are saved and offered for resuming on the next launch.
 
 ### Install the web app (`docker.tar.gz`)
 
-Requires only Docker with Compose v2.
+Requires only Docker with Compose v2. ffmpeg and Deno are already inside the image, so nothing else needs installing.
 
 1. Download `docker.tar.gz` and `docker-compose.yml` from the release page into one folder.
 2. In that folder, run:
