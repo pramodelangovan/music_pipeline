@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DesktopWindow</class>
+ <widget class="QWidget" name="DesktopWindow">
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin"><number>16</number></property>
+   <property name="topMargin"><number>16</number></property>
+   <property name="rightMargin"><number>16</number></property>
+   <property name="bottomMargin"><number>16</number></property>
+   <property name="spacing"><number>12</number></property>
+   <item>
+    <widget class="QFrame" name="Header">
+     <layout class="QHBoxLayout" name="headerLayout">
+      <property name="leftMargin"><number>14</number></property>
+      <property name="topMargin"><number>12</number></property>
+      <property name="rightMargin"><number>14</number></property>
+      <property name="bottomMargin"><number>12</number></property>
+      <item>
+       <layout class="QVBoxLayout" name="titleLayout">
+        <item><widget class="QLabel" name="HeaderTitle"><property name="text"><string>Music Pipeline</string></property></widget></item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QLabel" name="active_jobs_label">
+        <property name="text"><string>Active: 0</string></property>
+        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <widget class="QWidget" name="queue_tab">
+      <attribute name="title"><string>Queue</string></attribute>
+      <layout class="QVBoxLayout" name="queueLayout">
+       <property name="spacing"><number>10</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="queueActions">
+         <item><widget class="QPushButton" name="add_row_btn"><property name="text"><string>Add Row</string></property></widget></item>
+         <item><widget class="QPushButton" name="queue_btn"><property name="text"><string>Queue Downloads</string></property></widget></item>
+         <item><widget class="QPushButton" name="start_queue_btn"><property name="text"><string>Start Queue</string></property></widget></item>
+         <item><widget class="QPushButton" name="pause_queue_btn"><property name="text"><string>Pause Queue</string></property></widget></item>
+         <item><spacer name="queueActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QPushButton" name="retry_failed_btn"><property name="text"><string>Retry Failed</string></property></widget></item>
+         <item><widget class="QPushButton" name="clear_btn"><property name="text"><string>Clear Completed</string></property></widget></item>
+         <item><widget class="QPushButton" name="clear_all_btn"><property name="text"><string>Clear All</string></property></widget></item>
+        </layout>
+       </item>
+       <item><widget class="QLabel" name="downloadInputsLabel"><property name="text"><string>Download Inputs</string></property></widget></item>
+       <item>
+        <widget class="QTableWidget" name="queue_input_table">
+         <property name="alternatingRowColors"><bool>true</bool></property>
+         <column><property name="text"><string>URL</string></property></column>
+         <column><property name="text"><string>Type</string></property></column>
+         <column><property name="text"><string>Folder</string></property></column>
+        </widget>
+       </item>
+       <item><widget class="QLabel" name="queueStatusLabel"><property name="text"><string>Queue Status</string></property></widget></item>
+       <item>
+        <widget class="QTableWidget" name="queue_status_table">
+         <property name="alternatingRowColors"><bool>true</bool></property>
+         <column><property name="text"><string>Status</string></property></column>
+         <column><property name="text"><string>Type</string></property></column>
+         <column><property name="text"><string>Folder</string></property></column>
+         <column><property name="text"><string>URL</string></property></column>
+         <column><property name="text"><string>Error</string></property></column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="research_tab">
+      <attribute name="title"><string>Research</string></attribute>
+      <layout class="QVBoxLayout" name="researchLayout">
+       <property name="spacing"><number>10</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="researchForm">
+         <item><widget class="QLineEdit" name="research_name_edit"><property name="placeholderText"><string>Artist name</string></property></widget></item>
+         <item><widget class="QLineEdit" name="research_aliases_edit"><property name="placeholderText"><string>Aliases (comma separated)</string></property></widget></item>
+         <item><widget class="QLineEdit" name="research_albums_edit"><property name="placeholderText"><string>Known albums (comma separated)</string></property></widget></item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="researchOptions">
+         <item><widget class="QCheckBox" name="research_singles_check"><property name="text"><string>Find singles</string></property><property name="checked"><bool>true</bool></property></widget></item>
+         <item><widget class="QCheckBox" name="research_unknown_check"><property name="text"><string>Find other albums</string></property><property name="checked"><bool>true</bool></property></widget></item>
+         <item><spacer name="researchOptionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QLabel" name="research_status_label"><property name="text"><string>Idle</string></property></widget></item>
+         <item><widget class="QPushButton" name="research_start_btn"><property name="text"><string>Start Research</string></property></widget></item>
+         <item><widget class="QPushButton" name="research_cancel_btn"><property name="text"><string>Cancel</string></property><property name="enabled"><bool>false</bool></property></widget></item>
+        </layout>
+       </item>
+       <item><widget class="QPlainTextEdit" name="research_log"><property name="maximumHeight"><number>150</number></property><property name="readOnly"><bool>true</bool></property></widget></item>
+       <item>
+        <widget class="QTableWidget" name="research_table">
+         <property name="alternatingRowColors"><bool>true</bool></property>
+         <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+         <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
+         <column><property name="text"><string>Type</string></property></column>
+         <column><property name="text"><string>Title</string></property></column>
+         <column><property name="text"><string>Duration</string></property></column>
+         <column><property name="text"><string>URL</string></property></column>
+         <column><property name="text"><string>Download as</string></property></column>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="researchQueueActions">
+         <item><widget class="QPushButton" name="research_select_all_btn"><property name="text"><string>Select All</string></property></widget></item>
+         <item><spacer name="researchQueueSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QPushButton" name="research_queue_btn"><property name="text"><string>Queue Selected</string></property></widget></item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="settings_tab">
+      <attribute name="title"><string>Settings</string></attribute>
+      <layout class="QVBoxLayout" name="settingsLayout">
+       <property name="spacing"><number>12</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="downloadFolderRow">
+         <item><widget class="QLabel" name="downloadFolderLabel"><property name="text"><string>Download Folder</string></property></widget></item>
+         <item><widget class="QLineEdit" name="output_edit"/></item>
+         <item><widget class="QPushButton" name="browse_folder_btn"><property name="text"><string>Browse...</string></property></widget></item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="downloadGapRow">
+         <item><widget class="QLabel" name="downloadGapLabel"><property name="text"><string>Gap Between Downloads (sec)</string></property></widget></item>
+         <item><widget class="QSpinBox" name="gap_spin"><property name="maximum"><number>3600</number></property><property name="value"><number>12</number></property></widget></item>
+         <item><widget class="QPushButton" name="save_settings_btn"><property name="text"><string>Save Settings</string></property></widget></item>
+         <item><spacer name="downloadGapSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="cookiesRow">
+         <item><widget class="QPushButton" name="pick_cookies_btn"><property name="text"><string>Choose cookies.txt</string></property></widget></item>
+         <item><widget class="QLabel" name="cookies_file_label"><property name="text"><string>No file selected</string></property></widget></item>
+         <item><widget class="QPushButton" name="upload_cookies_btn"><property name="text"><string>Upload Cookies</string></property></widget></item>
+        </layout>
+       </item>
+       <item><widget class="QLabel" name="cookies_status_label"><property name="text"><string>Cookies status: unknown</string></property></widget></item>
+       <item>
+        <layout class="QHBoxLayout" name="logsRow">
+         <item><widget class="QPushButton" name="open_logs_btn"><property name="text"><string>Open Logs Folder</string></property></widget></item>
+         <item><widget class="QLabel" name="logs_path_label"><property name="text"><string></string></property><property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property></widget></item>
+        </layout>
+       </item>
+       <item><spacer name="settingsSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="history_tab">
+      <attribute name="title"><string>History</string></attribute>
+      <layout class="QVBoxLayout" name="historyLayout">
+       <item>
+        <layout class="QHBoxLayout" name="historyHeader">
+         <item><widget class="QLabel" name="historyLabel"><property name="text"><string>Download History</string></property></widget></item>
+         <item><spacer name="historyHeaderSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QPushButton" name="refresh_history_btn"><property name="text"><string>Refresh</string></property></widget></item>
+         <item><widget class="QPushButton" name="clear_history_btn"><property name="text"><string>Clear History</string></property></widget></item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="history_table">
+         <property name="alternatingRowColors"><bool>true</bool></property>
+         <column><property name="text"><string>Created</string></property></column>
+         <column><property name="text"><string>Status</string></property></column>
+         <column><property name="text"><string>Type</string></property></column>
+         <column><property name="text"><string>Folder</string></property></column>
+         <column><property name="text"><string>URL</string></property></column>
+         <column><property name="text"><string>Error</string></property></column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

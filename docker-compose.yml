@@ -1,5 +1,6 @@
 services:
   api:
+    image: music-pipeline-api:latest
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -7,12 +8,10 @@ services:
     restart: unless-stopped
     environment:
       - DENO_INSTALL=/opt/deno
+      - MP_DOWNLOAD_ROOT=/app/downloads
       - PATH=/opt/deno/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - ./downloads:/app/downloads
-      - ./logs:/app/logs
-      - ./cookies.txt:/app/cookies.txt
-      - ./config.yaml:/app/config.yaml
       - deno_cache:/opt/deno
     ports:
       - "0.0.0.0:81:81"
@@ -24,6 +23,7 @@ services:
       start_period: 20s
 
   web:
+    image: music-pipeline-web:latest
     build:
       context: .
       dockerfile: apps/web/Dockerfile

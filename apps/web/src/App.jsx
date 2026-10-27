@@ -3,16 +3,25 @@ import {
   Alert,
   AppBar,
   Box,
+  Breadcrumbs,
   Button,
   Card,
   CardContent,
   Chip,
+  Checkbox,
   Container,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   LinearProgress,
+  Link,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   MenuItem,
+  Paper,
   Select,
   Stack,
   Tab,
@@ -28,6 +37,9 @@ import {
 } from "@mui/material";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
@@ -67,10 +79,112 @@ export default function App() {
   const [error, setError] = useState("");
 
   const [gapSeconds, setGapSeconds] = useState(12);
+  const [researchForm, setResearchForm] = useState({
+    name: "",
+    aliases: "",
+    known_albums: "",
+    fetch_singles: true,
+    fetch_unknown_albums: true,
+  });
+  const [research, setResearch] = useState({ status: "idle", log: [], items: [], folder_name: "" });
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [researchMedia, setResearchMedia] = useState({});
+  const [paused, setPaused] = useState(false);
+  const [setupMessage, setSetupMessage] = useState("");
+  const [outputBase, setOutputBase] = useState("");
+  const [downloadRoot, setDownloadRoot] = useState(null);
   const [cookiesFile, setCookiesFile] = useState(null);
   const [cookiesStatus, setCookiesStatus] = useState(false);
+  const [logDirectory, setLogDirectory] = useState("");
+  const [logEntries, setLogEntries] = useState([]);
+  const [selectedLog, setSelectedLog] = useState("");
+  const [logContent, setLogContent] = useState("");
+  const [logsError, setLogsError] = useState("");
 
   const pendingJobs = useMemo(() => jobs.filter((j) => j.status === "queued" || j.status === "downloading"), [jobs]);
+
+  const fetchResearch = async () => {
+    const res = await fetch(`${API_BASE}/research`);
+    const payload = await parseResponse(res);
+    if (!res.ok) {
+      throw new Error(payload.detail || "Failed to fetch research status");
+    }
+    setResearch(payload);
+    return payload;
+  };
+
+  const splitCsv = (text) =>
+    text
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+  const startResearch = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: researchForm.name.trim(),
+          aliases: splitCsv(researchForm.aliases),
+          known_albums: splitCsv(researchForm.known_albums),
+          fetch_singles: researchForm.fetch_singles,
+          fetch_unknown_albums: researchForm.fetch_unknown_albums,
+        }),
+      });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(
+          Array.isArray(payload.detail) ? "Enter a valid artist name." : payload.detail || "Failed to start research"
+        );
+      }
+      setSelectedIds([]);
+      setResearch(payload);
+    } catch (err) {
+      setError(err.message || "Failed to start research");
+    }
+  };
+
+  const cancelResearch = async () => {
+    try {
+      await fetch(`${API_BASE}/research/cancel`, { method: "POST" });
+    } catch (err) {
+      setError(err.message || "Failed to cancel research");
+    }
+  };
+
+  const toggleSelected = (id) =>
+    setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+
+  const queueSelectedResearch = async () => {
+    setMessage("");
+    setError("");
+    const folder = research.folder_name || "research";
+    const items = research.items
+      .filter((item) => selectedIds.includes(item.id))
+      .map((item) => ({ url: item.url, media_type: researchMedia[item.id] || "audio", folder_name: folder }));
+    if (items.length === 0) {
+      setError("Select at least one result to queue.");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/queue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to queue research results");
+      }
+      setMessage(`Queued ${payload.accepted} research result(s) into '${folder}'.`);
+      await fetchJobs();
+    } catch (err) {
+      setError(err.message || "Failed to queue research results");
+    }
+  };
 
   const fetchJobs = async () => {
     const res = await fetch(`${API_BASE}/jobs`);
@@ -79,6 +193,28 @@ export default function App() {
       throw new Error(payload.detail || "Failed to fetch jobs");
     }
     setJobs(payload.jobs || []);
+    setPaused(Boolean(payload.paused));
+    setSetupMessage(payload.setup_message || "");
+  };
+
+  const setQueueRunning = async (running) => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/queue/${running ? "start" : "pause"}`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to change queue state");
+      }
+      setPaused(Boolean(payload.paused));
+      setMessage(
+        running
+          ? `Queue started.${payload.recovered ? ` Reloaded ${payload.recovered} queued job(s).` : ""}`
+          : "Queue paused. The current download will finish."
+      );
+    } catch (err) {
+      setError(err.message || "Failed to change queue state");
+    }
   };
 
   const fetchSettings = async () => {
@@ -88,6 +224,8 @@ export default function App() {
       throw new Error(payload.detail || "Failed to fetch settings");
     }
     setGapSeconds(payload.gap_seconds ?? 12);
+    setOutputBase(payload.output_base || "");
+    setDownloadRoot(payload.download_root || null);
     setCookiesStatus(Boolean(payload.cookies_exists));
   };
 
@@ -100,12 +238,48 @@ export default function App() {
     setHistoryRows(payload.history || []);
   };
 
+  const fetchLogDirectory = async (path) => {
+    const query = new URLSearchParams();
+    if (path) {
+      query.set("path", path);
+    }
+    const res = await fetch(`${API_BASE}/logs?${query.toString()}`);
+    const payload = await parseResponse(res);
+    if (!res.ok) {
+      throw new Error(payload.detail || "Failed to list logs");
+    }
+    setLogEntries(payload.entries || []);
+  };
+
+  const fetchLogContent = async (path) => {
+    const query = new URLSearchParams({ path, lines: "200" });
+    const res = await fetch(`${API_BASE}/logs/content?${query.toString()}`);
+    const payload = await parseResponse(res);
+    if (!res.ok) {
+      throw new Error(payload.detail || "Failed to read log");
+    }
+    setLogContent(payload.content || "");
+  };
+
+  const refreshLogs = async () => {
+    try {
+      setLogsError("");
+      await fetchLogDirectory(logDirectory);
+      if (selectedLog) {
+        await fetchLogContent(selectedLog);
+      }
+    } catch (err) {
+      setLogsError(err.message || "Failed to refresh logs");
+    }
+  };
+
   useEffect(() => {
     const loadInitial = async () => {
       try {
         await fetchSettings();
         await fetchJobs();
         await fetchHistory();
+        await fetchResearch();
       } catch (err) {
         setError(err.message || "Failed to connect to API");
       }
@@ -115,15 +289,37 @@ export default function App() {
     const timer = setInterval(async () => {
       try {
         await fetchJobs();
-        if (tab === 2) {
+        if (tab === 4) {
           await fetchHistory();
         }
       } catch {
         // Keep polling without crashing the UI.
       }
     }, 5000);
-    return () => clearInterval(timer);
-  }, [tab]);
+    const researchTimer = setInterval(async () => {
+      try {
+        if (tab === 1 || research.status === "running") {
+          await fetchResearch();
+        }
+      } catch {
+        // Keep polling without crashing the UI.
+      }
+    }, 1500);
+    return () => {
+      clearInterval(timer);
+      clearInterval(researchTimer);
+    };
+  }, [tab, research.status]);
+
+  useEffect(() => {
+    if (tab !== 3) {
+      return undefined;
+    }
+
+    refreshLogs();
+    const logsTimer = setInterval(refreshLogs, 5000);
+    return () => clearInterval(logsTimer);
+  }, [tab, logDirectory, selectedLog]);
 
   const addRow = () => setRows((current) => [...current, makeRow()]);
   const removeRow = (id) => {
@@ -177,13 +373,14 @@ export default function App() {
       const res = await fetch(`${API_BASE}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gap_seconds: Number(gapSeconds) }),
+        body: JSON.stringify({ gap_seconds: Number(gapSeconds), output_base: outputBase }),
       });
       const payload = await parseResponse(res);
       if (!res.ok) {
         throw new Error(payload.detail || "Failed to save settings");
       }
-      setMessage(`Saved queue gap: ${payload.gap_seconds}s`);
+      setOutputBase(payload.output_base || outputBase);
+      setMessage(`Saved: gap ${payload.gap_seconds}s, download folder ${payload.output_base}`);
     } catch (err) {
       setError(err.message || "Failed to save settings");
     }
@@ -229,9 +426,62 @@ export default function App() {
       }
       await fetchJobs();
       await fetchHistory();
-      setMessage(`Cleared ${payload.cleared || 0} recent completed rows from download page.`);
+      setMessage(`Cleared ${payload.cleared || 0} completed rows from download page.`);
     } catch (err) {
       setError(err.message || "Failed to clear recent downloads");
+    }
+  };
+
+  const clearAllDownloads = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/jobs/clear-all`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to clear downloads");
+      }
+      await fetchJobs();
+      await fetchHistory();
+      setMessage(`Cleared ${payload.cleared || 0} finished rows (queued/active kept).`);
+    } catch (err) {
+      setError(err.message || "Failed to clear downloads");
+    }
+  };
+
+  const retryFailedDownloads = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/jobs/retry-failed`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to retry downloads");
+      }
+      await fetchJobs();
+      setMessage(payload.retried ? `Re-queued ${payload.retried} failed download(s).` : "No failed downloads to retry.");
+    } catch (err) {
+      setError(err.message || "Failed to retry downloads");
+    }
+  };
+
+  const clearHistory = async () => {
+    setMessage("");
+    setError("");
+    if (!window.confirm("Delete all completed and failed history? Active downloads will be kept.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/history/clear`, { method: "POST" });
+      const payload = await parseResponse(res);
+      if (!res.ok) {
+        throw new Error(payload.detail || "Failed to clear history");
+      }
+      await fetchJobs();
+      await fetchHistory();
+      setMessage(`Deleted ${payload.cleared || 0} completed/failed history rows.`);
+    } catch (err) {
+      setError(err.message || "Failed to clear history");
     }
   };
 
@@ -240,10 +490,11 @@ export default function App() {
       <Container maxWidth="lg">
         <AppBar position="static" elevation={0} sx={{ borderRadius: 3, bgcolor: "white", color: "#122847" }}>
           <Toolbar>
+            <Box component="img" src="/music-pipeline.svg" alt="Music Pipeline logo" sx={{ height: 40, mr: 1.5 }} />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              Queue Download Studio
+              Music Pipeline
             </Typography>
-            <Chip label={`${pendingJobs.length} active`} color="primary" variant="outlined" />
+            <Chip label={`${pendingJobs.length} active${paused ? " • paused" : ""}`} color={paused ? "warning" : "primary"} variant="outlined" />
           </Toolbar>
         </AppBar>
 
@@ -251,9 +502,129 @@ export default function App() {
           <CardContent>
             <Tabs value={tab} onChange={(_, value) => setTab(value)}>
               <Tab label="Queue" />
+              <Tab label="Research" />
               <Tab label="Settings" />
+              <Tab label="Logs" />
               <Tab label="History" />
             </Tabs>
+
+            {tab === 1 && (
+              <Box sx={{ mt: 3 }}>
+                <Stack spacing={2}>
+                  <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                    <TextField
+                      label="Artist name"
+                      value={researchForm.name}
+                      onChange={(e) => setResearchForm({ ...researchForm, name: e.target.value })}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Aliases (comma separated)"
+                      value={researchForm.aliases}
+                      onChange={(e) => setResearchForm({ ...researchForm, aliases: e.target.value })}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Known albums (comma separated)"
+                      value={researchForm.known_albums}
+                      onChange={(e) => setResearchForm({ ...researchForm, known_albums: e.target.value })}
+                      fullWidth
+                    />
+                  </Stack>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={researchForm.fetch_singles}
+                          onChange={(e) => setResearchForm({ ...researchForm, fetch_singles: e.target.checked })}
+                        />
+                      }
+                      label="Find singles"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={researchForm.fetch_unknown_albums}
+                          onChange={(e) => setResearchForm({ ...researchForm, fetch_unknown_albums: e.target.checked })}
+                        />
+                      }
+                      label="Find other albums"
+                    />
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Chip label={research.status} variant="outlined" color={research.status === "failed" ? "error" : "primary"} />
+                    <Button variant="contained" onClick={startResearch} disabled={research.status === "running"}>
+                      Start Research
+                    </Button>
+                    <Button variant="outlined" onClick={cancelResearch} disabled={research.status !== "running"}>
+                      Cancel
+                    </Button>
+                  </Stack>
+
+                  {research.status === "running" && <LinearProgress />}
+
+                  <Box
+                    component="pre"
+                    sx={{ m: 0, p: 1.5, maxHeight: 180, overflow: "auto", bgcolor: "#f4f6fb", borderRadius: 1, fontSize: 12 }}
+                  >
+                    {research.log.length ? research.log.join("\n") : "Research log will appear here."}
+                  </Box>
+
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={research.items.length > 0 && selectedIds.length === research.items.length}
+                            indeterminate={selectedIds.length > 0 && selectedIds.length < research.items.length}
+                            onChange={(e) => setSelectedIds(e.target.checked ? research.items.map((i) => i.id) : [])}
+                          />
+                        </TableCell>
+                        <TableCell>Type</TableCell>
+                        <TableCell>Title</TableCell>
+                        <TableCell>Duration</TableCell>
+                        <TableCell>URL</TableCell>
+                        <TableCell>Download as</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {research.items.map((item) => (
+                        <TableRow key={item.id} hover>
+                          <TableCell padding="checkbox">
+                            <Checkbox checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} />
+                          </TableCell>
+                          <TableCell>{item.type}</TableCell>
+                          <TableCell>{item.title}</TableCell>
+                          <TableCell>
+                            {Math.floor((item.duration || 0) / 60)}:{String((item.duration || 0) % 60).padStart(2, "0")}
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <a href={item.url} target="_blank" rel="noreferrer">
+                              {item.url}
+                            </a>
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              size="small"
+                              value={researchMedia[item.id] || "audio"}
+                              onChange={(e) => setResearchMedia((cur) => ({ ...cur, [item.id]: e.target.value }))}
+                            >
+                              <MenuItem value="audio">Audio</MenuItem>
+                              <MenuItem value="video">Video</MenuItem>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Button variant="contained" onClick={queueSelectedResearch} disabled={selectedIds.length === 0}>
+                      Queue Selected
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
 
             {tab === 0 && (
               <Box sx={{ mt: 3 }}>
@@ -298,17 +669,35 @@ export default function App() {
                     <Button variant="contained" onClick={submitQueue} disabled={loading}>
                       Queue Downloads
                     </Button>
+                    <Button variant="contained" color="success" onClick={() => setQueueRunning(true)}>
+                      Start Queue
+                    </Button>
+                    <Button variant="outlined" color="warning" onClick={() => setQueueRunning(false)} disabled={paused}>
+                      Pause Queue
+                    </Button>
                   </Stack>
                 </Stack>
+
+                {setupMessage && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    {setupMessage}
+                  </Alert>
+                )}
 
                 {loading && <LinearProgress sx={{ mt: 2 }} />}
 
                 <Typography variant="h6" sx={{ mt: 4, mb: 1 }}>
                   Queue Status
                 </Typography>
-                <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mb: 1 }}>
+                  <Button variant="outlined" onClick={retryFailedDownloads}>
+                    Retry Failed
+                  </Button>
                   <Button variant="text" color="warning" onClick={clearRecentDownloads}>
-                    Clear Last Downloads
+                    Clear Completed
+                  </Button>
+                  <Button variant="text" color="error" onClick={clearAllDownloads}>
+                    Clear All
                   </Button>
                 </Stack>
                 <Table size="small">
@@ -347,7 +736,7 @@ export default function App() {
               </Box>
             )}
 
-            {tab === 1 && (
+            {tab === 2 && (
               <Box sx={{ mt: 3 }}>
                 <Stack spacing={3}>
                   <TextField
@@ -358,8 +747,19 @@ export default function App() {
                     onChange={(e) => setGapSeconds(e.target.value)}
                     sx={{ maxWidth: 320 }}
                   />
+                  <TextField
+                    label="Download Folder"
+                    value={outputBase}
+                    onChange={(e) => setOutputBase(e.target.value)}
+                    helperText={
+                      downloadRoot
+                        ? `Must be inside the mounted volume: ${downloadRoot} (relative names are allowed)`
+                        : "Absolute path, or relative to the project folder"
+                    }
+                    sx={{ maxWidth: 640 }}
+                  />
                   <Button variant="contained" onClick={saveSettings}>
-                    Save Gap Setting
+                    Save Settings
                   </Button>
 
                   <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "flex-start", md: "center" }}>
@@ -388,22 +788,130 @@ export default function App() {
               </Box>
             )}
 
-            {tab === 2 && (
+            {tab === 3 && (
+              <Box sx={{ mt: 3 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                  <Breadcrumbs aria-label="Logs folder">
+                    <Link
+                      component="button"
+                      underline="hover"
+                      color={logDirectory ? "inherit" : "text.primary"}
+                      onClick={() => {
+                        setLogDirectory("");
+                        setSelectedLog("");
+                        setLogContent("");
+                      }}
+                    >
+                      logs
+                    </Link>
+                    {logDirectory.split("/").filter(Boolean).map((part, index, parts) => {
+                      const path = parts.slice(0, index + 1).join("/");
+                      return (
+                        <Link
+                          key={path}
+                          component="button"
+                          underline="hover"
+                          color={index === parts.length - 1 ? "text.primary" : "inherit"}
+                          onClick={() => {
+                            setLogDirectory(path);
+                            setSelectedLog("");
+                            setLogContent("");
+                          }}
+                        >
+                          {part}
+                        </Link>
+                      );
+                    })}
+                  </Breadcrumbs>
+                  <Button variant="outlined" startIcon={<RefreshIcon />} onClick={refreshLogs}>
+                    Refresh
+                  </Button>
+                </Stack>
+
+                {logsError && <Alert severity="error" sx={{ mb: 2 }}>{logsError}</Alert>}
+
+                <Paper variant="outlined" sx={{ mb: 2, maxHeight: 240, overflow: "auto" }}>
+                  <List dense disablePadding>
+                    {logEntries.map((entry) => {
+                      const path = logDirectory ? `${logDirectory}/${entry.name}` : entry.name;
+                      const isDirectory = entry.type === "directory";
+                      return (
+                        <ListItemButton
+                          key={path}
+                          selected={!isDirectory && selectedLog === path}
+                          onClick={() => {
+                            if (isDirectory) {
+                              setLogDirectory(path);
+                              setSelectedLog("");
+                              setLogContent("");
+                              setLogsError("");
+                              return;
+                            }
+                            setSelectedLog(path);
+                            setLogsError("");
+                            fetchLogContent(path).catch((err) => setLogsError(err.message || "Failed to read log"));
+                          }}
+                        >
+                          <ListItemIcon>
+                            {isDirectory ? <FolderOutlinedIcon /> : <InsertDriveFileOutlinedIcon />}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={entry.name}
+                            secondary={isDirectory ? "Folder" : `${entry.size_bytes} bytes`}
+                          />
+                        </ListItemButton>
+                      );
+                    })}
+                    {logEntries.length === 0 && (
+                      <ListItemText sx={{ px: 2, py: 1 }} primary="No log files or folders here." />
+                    )}
+                  </List>
+                </Paper>
+
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  {selectedLog ? `Recent entries — ${selectedLog}` : "Recent log entries"}
+                </Typography>
+                <Box
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    p: 1.5,
+                    minHeight: 220,
+                    maxHeight: 480,
+                    overflow: "auto",
+                    bgcolor: "#f4f6fb",
+                    borderRadius: 1,
+                    fontSize: 12,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {selectedLog ? logContent || "This log file is empty." : "Select a .log file to view its latest entries."}
+                </Box>
+              </Box>
+            )}
+
+            {tab === 4 && (
               <Box sx={{ mt: 3 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                   <Typography variant="h6">Download History</Typography>
-                  <Button
-                    variant="outlined"
-                    onClick={async () => {
-                      try {
-                        await fetchHistory();
-                      } catch (err) {
-                        setError(err.message || "Failed to refresh history");
-                      }
-                    }}
-                  >
-                    Refresh
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      onClick={async () => {
+                        try {
+                          await fetchHistory();
+                        } catch (err) {
+                          setError(err.message || "Failed to refresh history");
+                        }
+                      }}
+                    >
+                      Refresh
+                    </Button>
+                    <Button variant="outlined" color="error" onClick={clearHistory}>
+                      Clear History
+                    </Button>
+                  </Stack>
                 </Stack>
 
                 <Table size="small">
